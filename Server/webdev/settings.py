@@ -39,8 +39,9 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'detection',
+    'alertuploadREST',
     'rest_framework.authtoken',
-
+    'rest_framework',
 ]
 
 MIDDLEWARE = [
@@ -129,3 +130,4 @@ STATICFILES_DIRS =[
     BASE_DIR / "static"
 ]
 
+MEDIA_ROOT = 'static/images'
