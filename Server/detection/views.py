@@ -10,7 +10,7 @@ from .forms import CreateUserForm
 from .filters import DetectionFilter
 from .models import UploadAlert
 
-#from rest_framework.authtoken.models import Token
+from rest_framework.authtoken.models import Token
 
 def loginPage(request):
 	if request.user.is_authenticated:
@@ -55,7 +55,17 @@ def logoutUser(request):
 
 @login_required(login_url='login')
 def home(request):
-	return render(request, 'detection/dashboard.html', {})
+
+	token = Token.objects.get(user=request.user)
+
+	uploadAlert = UploadAlert.objects.filter(userID = token)
+
+	myFilter = DetectionFilter(request.GET, queryset=uploadAlert)
+	uploadAlert = myFilter.qs 
+
+	context = {'myFilter':myFilter, 'uploadAlert':uploadAlert}
+
+	return render(request, 'detection/dashboard.html', context)
 
 
 def alert(request, pk):
