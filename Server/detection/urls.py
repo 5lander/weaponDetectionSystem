@@ -10,7 +10,7 @@ urlpatterns = [
     path('register/', views.registerPage, name='register'),
     path('', views.home, name='home'),
     path('logout/', views.logoutUser, name='logout'),
-    
+
     path('resetpassword/',
          auth_views.PasswordResetView.as_view(template_name = "detection/password_reset.html"),
          name ='resetpassword'),
@@ -23,5 +23,6 @@ urlpatterns = [
     path('resetpasswordcomplete/',
          auth_views.PasswordResetCompleteView.as_view(template_name = "detection/password_reset_done.html"),
          name ='resetpasswordcomplete'),
+    path('alert/<uuid:pk>/',views.alert, name='alert'),         
 
 ]

@@ -7,8 +7,10 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 
 from .forms import CreateUserForm
-#from .filters import DetectionFilter
+from .filters import DetectionFilter
 from .models import UploadAlert
+
+#from rest_framework.authtoken.models import Token
 
 def loginPage(request):
 	if request.user.is_authenticated:
@@ -54,3 +56,15 @@ def logoutUser(request):
 @login_required(login_url='login')
 def home(request):
 	return render(request, 'detection/dashboard.html', {})
+
+
+def alert(request, pk):
+
+	uploadAlert = UploadAlert.objects.filter(image = str(pk) + ".jpg")
+
+	myFilter = DetectionFilter(request.GET, queryset=uploadAlert)
+	uploadAlert = myFilter.qs 
+
+	context = {'myFilter':myFilter, 'uploadAlert':uploadAlert}
+
+	return render(request, 'detection/alert.html', context)
