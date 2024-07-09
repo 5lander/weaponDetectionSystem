@@ -78,21 +78,27 @@
 	
 <div class="limiter">
 <div class="container-login100 p-t-0">
-<div class="wrap-login100 p-l-40 p-r-40 p-t-25 p-b-15">
+	<div class="wrap-login100 p-l-40 p-r-40 p-t-25 p-b-15">
 		
-			<table class="table table-image">
-				<tr>
-					<th scope="col" class="top-row">Detection</th>
-					<th scope="col" class="top-row">Location</th>
-					<th scope="col" class="top-row">Alert was sent to</th>
-					<th scope="col" class="top-row">Time</th>
-					<th scope="col" class="top-row">Alert</th>
-				</tr>
+		<table class="table table-image">
+			<tr>
+				<th scope="col" class="top-row">Detection</th>
+				<th scope="col" class="top-row">Location</th>
+				<th scope="col" class="top-row">Alert was sent to</th>
+				<th scope="col" class="top-row">Time</th>
+				<th scope="col" class="top-row">Alert</th>
+			</tr>
 
+			{% for alert in uploadAlert %}
 
+			<tr>
+				<td class="w-25"><img style="max-width: 250px; max-height: 150x; border-radius: 2.5%;" 
+					class="img-fluid" src='http://127.0.0.1:8000/static/images/{{alert.image}}'/></td>
+			</tr>
+			{% endfor %}
 
-			</table>
-		
+		</table>
+	
 </div>
 </div>
 </div>

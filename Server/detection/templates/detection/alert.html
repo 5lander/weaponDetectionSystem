@@ -17,7 +17,7 @@
 <body>
 
 	<nav class="navbar navbar-dark bg-dark justify-content-between">
-		<a class="navbar-brand" href="" style="margin-left: 45px;">Weapon Detection System</a>	  
+		<a class="navbar-brand" href="{% url 'home' %}" style="margin-left: 45px;">Weapon Detection System</a>	  
 	</nav>
 	
 <div class="limiter">
@@ -32,7 +32,7 @@
 		{% for alert in uploadAlert %}
 
 		<tr>
-			<td class="w-25"><img class="img-fluid" src='https://uploaded-alerts.s3.eu-north-1.amazonaws.com/media/{{alert.image}}'/></td>
+			<td class="w-25"><img class="img-fluid" src='http://127.0.0.1:8000/static/images/{{alert.image}}'/></td>
 		</tr>
 		{% endfor %}
 	</table>
@@ -48,8 +48,8 @@
 
 				<tr>
 					<td>{{alert.location}}</td>
-					<td>{{alert.alert_receiver}}</td>
-					<td>{{alert.date_created|date:"Y-m-d H:i:s"}}</td>
+					<td>{{alert.alertReceiver}}</td>
+					<td>{{alert.dateCreated|date:"Y-m-d H:i:s"}}</td>
 					
 				</tr>
 				{% endfor %}

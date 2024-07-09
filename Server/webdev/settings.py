@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     'alertuploadREST',
     'rest_framework.authtoken',
     'rest_framework',
+    'django_extensions',
 ]
 
 MIDDLEWARE = [
