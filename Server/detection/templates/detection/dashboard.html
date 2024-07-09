@@ -2,6 +2,7 @@
 
 {% block content %}
 
+{% load event_tags %}
 {% load static %}
 
 <div class="limiter">
@@ -24,31 +25,31 @@
 					<div class="col">
 						<!-- Alert was sent to Input -->
 						<input class="form-control" type="text"  placeholder="Alert was sent to"
-						name="{{ myFilter.form.alert_receiver.name }}"
-						id="{{ myFilter.form.alert_receiver.id_for_label }}"
-						{% if myFilter.form.alert_receiver.value != None %}value="{{ myFilter.form.alert_receiver.value|stringformat:'s' }}"{% endif %}
-						maxlength="{{ myFilter.form.alert_receiver.field.max_length }}"
-						{% if myFilter.form.alert_receiver.field.required %}required{% endif %}>
+						name="{{ myFilter.form.alertReceiver.name }}"
+						id="{{ myFilter.form.alertReceiver.id_for_label }}"
+						{% if myFilter.form.alertReceiver.value != None %}value="{{ myFilter.form.alertReceiver.value|stringformat:'s' }}"{% endif %}
+						maxlength="{{ myFilter.form.alertReceiver.field.max_length }}"
+						{% if myFilter.form.alertReceiver.field.required %}required{% endif %}>
 					</div>
 
 					<div class="col-2">
 						<!-- Start Date Input -->
 						<input class="form-control" type="text" id="date" placeholder="Start Date" autocomplete="off"
-						name="{{ myFilter.form.start_date.name }}"
-						id="{{ myFilter.form.start_date.id_for_label }}"
-						{% if myFilter.form.start_date.value != None %}value="{{ myFilter.form.start_date.value|stringformat:'s' }}"{% endif %}
-						maxlength="{{ myFilter.form.start_date.field.max_length }}"
-						{% if myFilter.form.start_date.field.required %}required{% endif %}>
+						name="{{ myFilter.form.startDate.name }}"
+						id="{{ myFilter.form.startDate.id_for_label }}"
+						{% if myFilter.form.startDate.value != None %}value="{{ myFilter.form.startDate.value|stringformat:'s' }}"{% endif %}
+						maxlength="{{ myFilter.form.startDate.field.max_length }}"
+						{% if myFilter.form.startDate.field.required %}required{% endif %}>
 					</div>
 
 					<div class="col-2">
 						<!-- End Date Input Input -->
 						<input class="form-control" type="text" id="date" placeholder="End Date" autocomplete="off"
-						name="{{ myFilter.form.end_date.name }}"
-						id="{{ myFilter.form.end_date.id_for_label }}"
-						{% if myFilter.form.end_date.value != None %}value="{{ myFilter.form.end_date.value|stringformat:'s' }}"{% endif %}
-						maxlength="{{ myFilter.form.end_date.field.max_length }}"
-						{% if myFilter.form.end_date.field.required %}required{% endif %}>
+						name="{{ myFilter.form.endDate.name }}"
+						id="{{ myFilter.form.endDate.id_for_label }}"
+						{% if myFilter.form.endDate.value != None %}value="{{ myFilter.form.endDate.value|stringformat:'s' }}"{% endif %}
+						maxlength="{{ myFilter.form.endDate.field.max_length }}"
+						{% if myFilter.form.endDate.field.required %}required{% endif %}>
 					</div>
 
 					<div class="col-1">
@@ -94,12 +95,22 @@
 			<tr>
 				<td class="w-25"><img style="max-width: 250px; max-height: 150x; border-radius: 2.5%;" 
 					class="img-fluid" src='http://127.0.0.1:8000/static/images/{{alert.image}}'/></td>
+				<td>{{alert.location}}</td>
+				<td>{{alert.alertReceiver}}</td>
+				<td>{{alert.dateCreated|date:"Y-m-d H:i:s"}}</td>
+				
+				{% with uuid=alert.image|split:"." %}
+
+				<td><a class="btn btn-sm btn-info" href="/alert/{{uuid.0}}">View</a></td>
+
+				{% endwith %}
+				
 			</tr>
 			{% endfor %}
 
 		</table>
 	
-</div>
+	</div>
 </div>
 </div>
 
