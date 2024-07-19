@@ -25,7 +25,7 @@ class MonitoringWindow(QMainWindow):
             if self.detectionWindow.isVisible():
                 print('La deteccion esta abierta')
             else:
-                self.detectionWindow.createDetectionInstance(self.token, self.ubicationInput.text(), self.startMonitoring.text())
+                self.detectionWindow.createDetectionInstance(self.token, self.ubicationInput.text(), self.receiveInput.text())
                 self.detectionWindow.startDetection()
 
     def closeEvent(self,event):

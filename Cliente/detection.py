@@ -54,8 +54,6 @@ class Detection(QThread):
         print("Clases disponibles:", model.names)
 
         cap = cv2.VideoCapture(0)
-        
-        startingTime = time.time()
 
         while self.running:
             ret, frame = cap.read()
@@ -63,26 +61,28 @@ class Detection(QThread):
             if ret:
                 results = model(frame)
 
+                detection_made = False
                 for r in results:
                     boxes = r.boxes
                     for box in boxes:
-                        x1, y1, x2, y2 = box.xyxy[0]
-                        x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
-                        
                         conf = box.conf[0]
                         cls = int(box.cls[0])
 
                         if conf > 0.5:
+                            x1, y1, x2, y2 = box.xyxy[0]
+                            x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
                             color = self.colors.get(cls, (255, 255, 255))
                             cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
                             label = f'{model.names[cls]} {conf:.2f}'
                             cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
+                        if conf > 0.80:
+                            detection_made = True
 
-                elapsedTime = time.time() - startingTime
-                if elapsedTime >= 10:
-                    startingTime = time.time()
+
+
+                    
+                if detection_made:
                     self.saveDetection(frame)
-
                 rgbImage = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 h, w, ch = rgbImage.shape
                 bytesPerLine = ch * w
@@ -98,28 +98,23 @@ class Detection(QThread):
 
         cap.release()
 
-	# Saves detected frame as a .jpg within the saved_alert folder
     def saveDetection(self, frame):
         cv2.imwrite("savedFrame/frame.jpg", frame)
         print('Frame Saved')
         self.postDetection()
 
-	# Sends alert to the server
     def postDetection(self):
         try:
             url = 'http://127.0.0.1:8000/api/images/'
             headers = {'Authorization': 'Token ' + self.token}
             files = {'image': open('savedFrame/frame.jpg', 'rb')}
-            data = {'userID': self.token,'location': self.location, 'alertReceiver': self.receiver}
+            data = {'userID': self.token, 'location': self.location, 'alertReceiver': self.receiver}
             response = requests.post(url, files=files, headers=headers, data=data)
 
-			# HTTP 200
             if response.ok:
                 print('Alert was sent to the server')
-			# Bad response
             else:
                 print('Unable to send alert to the server')
         except Exception as e:
             print(f'Error al acceder al servidor: {str(e)}')
             print(traceback.format_exc())
-
