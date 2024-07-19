@@ -9,10 +9,13 @@ class DetectionWindow(QMainWindow):
     def __init__(self):
         super(DetectionWindow,self).__init__()
         loadUi('UI/monitoringCameraWindow.ui',self)
+        self.model_path = "model/predict.pt"  
         self.stopButton.clicked.connect(self.close)
+        self.detection= None
 
     def createDetectionInstance(self):
-        self.detection= Detection()
+        if self.detection is None:
+            self.detection = Detection(self.model_path)
 
     @pyqtSlot(QImage)
     def  setImage(self,image):
