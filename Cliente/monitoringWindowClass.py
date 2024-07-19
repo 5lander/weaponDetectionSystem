@@ -3,22 +3,30 @@ from PyQt5.uic import loadUi
 from detectionWindow import DetectionWindow
 
 class MonitoringWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, token):
         super(MonitoringWindow, self).__init__()
         loadUi('UI/monitoringWindow.ui', self)
+        self.token = token
 
-        self.startMonitoring.clicked.connect(self.goToMonitoringPage)
+
         self.detectionWindow =DetectionWindow()
+        self.startMonitoring.clicked.connect(self.goToMonitoringPage)
+        self.popup = QMessageBox()
+        self.popup.setWindowTitle("Failed")
+        self.popup.setText("Fields must not be empty.")
 
     def displayInfo(self):
         self.show()
 
     def goToMonitoringPage(self):
-        if self.detectionWindow.isVisible():
-            print('La deteccion esta abierta')
+        if self.ubicationInput.text() == '' or self.startMonitoring.text() == '':
+              self.popup.exec_()
         else:
-            self.detectionWindow.createDetectionInstance()
-            self.detectionWindow.startDetection()
+            if self.detectionWindow.isVisible():
+                print('La deteccion esta abierta')
+            else:
+                self.detectionWindow.createDetectionInstance(self.token, self.ubicationInput.text(), self.startMonitoring.text())
+                self.detectionWindow.startDetection()
 
     def closeEvent(self,event):
 
