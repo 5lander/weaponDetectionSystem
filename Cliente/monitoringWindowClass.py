@@ -14,7 +14,6 @@ class MonitoringWindow(QMainWindow):
         self.show()
 
     def goToMonitoringPage(self):
-
         if self.detectionWindow.isVisible():
             print('La deteccion esta abierta')
         else:
