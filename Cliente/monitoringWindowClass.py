@@ -32,5 +32,5 @@ class MonitoringWindow(QMainWindow):
 
         if self.detectionWindow.isVisible():
             self.detectionWindow.detection.running =False
-            self.detectionwindow.close()
+            self.detectionWindow.close()
             event.accept()
