@@ -13,7 +13,7 @@ class CreateUserForm(UserCreationForm):
 		fields = ['username', 'email', 'password1', 'password2']
 
 	# Checks if the provided email exists
-	def cleanemail(self):
+	def cleanEmail(self):
 		if User.objects.filter(email=self.cleaned_data['email']).exists():
 			raise forms.ValidationError("The given email is already registered.")
 		return self.cleaned_data['email']
