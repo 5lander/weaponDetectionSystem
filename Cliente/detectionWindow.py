@@ -42,6 +42,5 @@ class DetectionWindow(QMainWindow):
         self.show()
 
     def closeEvent(self, event):
-        if self.detection:
-            self.detection.running = False
+        self.detection.running = False if self.detection else None
         event.accept()

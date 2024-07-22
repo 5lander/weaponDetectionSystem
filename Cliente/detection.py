@@ -75,12 +75,8 @@ class Detection(QThread):
                             cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
                             label = f'{model.names[cls]} {conf:.2f}'
                             cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
-                        if conf > 0.80:
                             detection_made = True
-
-
-
-                    
+    
                 if detection_made:
                     self.saveDetection(frame)
                 rgbImage = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
