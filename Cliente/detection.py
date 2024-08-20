@@ -13,7 +13,7 @@ class Detection(QThread):
     changePixmap = pyqtSignal(QImage)
     resourceUpdate = pyqtSignal(dict)  
 
-    def __init__(self, model_path,token,location,receiver):
+    def __init__(self, model_path, token, location, receiver):
         super(Detection, self).__init__()
         self.model_path = model_path
         self.colors = {0: (0, 0, 255), 1: (0, 165, 255)}  
@@ -22,6 +22,10 @@ class Detection(QThread):
         self.token = token
         self.location = location
         self.receiver = receiver
+        self.last_capture_time = 0
+        self.capture_interval = 2  # Intervalo de captura en segundos
+        self.frame_skip = 1  # Procesar 1 frame cada 10 frames
+        self.frame_count = 0
 
     def monitor_resources(self):
         cpu_percent = psutil.cpu_percent()
@@ -57,28 +61,33 @@ class Detection(QThread):
 
         while self.running:
             ret, frame = cap.read()
+            self.frame_count += 1
 
             if ret:
-                results = model(frame)
+                if self.frame_count % self.frame_skip == 0:
+                    results = model(frame, verbose=False)  # Desactivar la salida verbose
 
-                detection_made = False
-                for r in results:
-                    boxes = r.boxes
-                    for box in boxes:
-                        conf = box.conf[0]
-                        cls = int(box.cls[0])
+                    detection_made = False
+                    for r in results:
+                        boxes = r.boxes
+                        for box in boxes:
+                            conf = box.conf[0]
+                            cls = int(box.cls[0])
 
-                        if conf > 0.5:
-                            x1, y1, x2, y2 = box.xyxy[0]
-                            x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
-                            color = self.colors.get(cls, (255, 255, 255))
-                            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-                            label = f'{model.names[cls]} {conf:.2f}'
-                            cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
-                            detection_made = True
-    
-                if detection_made:
-                    self.saveDetection(frame)
+                            if conf > 0.5:
+                                x1, y1, x2, y2 = box.xyxy[0]
+                                x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+                                color = self.colors.get(cls, (255, 255, 255))
+                                cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+                                label = f'{model.names[cls]} {conf:.2f}'
+                                cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
+                                detection_made = True
+        
+                    current_time = time.time()
+                    if detection_made and (current_time - self.last_capture_time) >= self.capture_interval:
+                        self.saveDetection(frame)
+                        self.last_capture_time = current_time
+
                 rgbImage = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 h, w, ch = rgbImage.shape
                 bytesPerLine = ch * w
