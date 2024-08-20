@@ -12,7 +12,7 @@ class LoginWindow(QMainWindow):
 		self.registerButton.clicked.connect(self.goToRegisterPage)
 		self.loginButton.clicked.connect(self.login)
 		self.popup = QMessageBox()
-		self.popup.setWindowTitle("Failed")
+		self.popup.setWindowTitle("Fallo")
 
 		self.show()
 
@@ -34,11 +34,11 @@ class LoginWindow(QMainWindow):
 
 			else:
 
-				self.popup.setText("Username or Password is not correct")
+				self.popup.setText("El usuario o la contrasena no estan correctos")
 				self.popup.exec_()
 		except:
 
-			self.popup.setText("Unable to access server")
+			self.popup.setText("No se puede acceder al servidor")
 			self.popup.exec_()
 	
 
