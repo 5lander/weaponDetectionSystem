@@ -148,6 +148,9 @@ STATICFILES_DIRS =[
 
 MEDIA_ROOT = 'static/images'
 
+TWILIO_ACCOUNT_SID = os.environ['TWILIO_ACCOUNT_SID']
+TWILIO_AUTH_TOKEN = os.environ['TWILIO_AUTH_TOKEN']
+TWILIO_NUMBER = os.environ['TWILIO_NUMBER'] 
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
