@@ -41,9 +41,8 @@ def identify_email_sms(serializer):
         print("Valid Email")
         send_email(serializer)
     elif re.compile("[+593][0-9]{10}").match(serializer.data['alertReceiver']):
-        # 1) Begins with +3706
-        # 2) Then contains 7 digits 
         print("Valid Mobile Number")
+        send_sms(serializer)
     else:
         print("Invalid Email or Mobile number")
 
@@ -56,6 +55,14 @@ def send_email(serializer):
     [serializer.data['alertReceiver']],
     fail_silently=False,)
 
+# Sends SMS
+@start_new_thread
+def send_sms(serializer):
+    client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+
+    message = client.messages.create(body=prepare_alert_message(serializer),
+                                    from_=settings.TWILIO_NUMBER,
+                                    to=serializer.data['alertReceiver'])
 
 def prepare_alert_message(serializer):
     image_data = split(serializer.data['image'], ".")

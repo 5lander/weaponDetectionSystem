@@ -11,18 +11,18 @@ urlpatterns = [
     path('', views.home, name='home'),
     path('logout/', views.logoutUser, name='logout'),
 
-    path('resetpassword/',
+    path('reset_password/',
          auth_views.PasswordResetView.as_view(template_name = "detection/password_reset.html"),
-         name ='resetpassword'),
+         name ='reset_password'),
     path('resetpasswordsent/',
          auth_views.PasswordResetDoneView.as_view(template_name = "detection/password_reset_sent.html"),
-         name ='resetpasswordsent'),
+         name ='password_reset_done'),
     path('reset/<uidb64>/<token>/',
          auth_views.PasswordResetConfirmView.as_view(template_name = "detection/password_reset_form.html"),
-         name ='resetpasswordsent'),
+         name ='password_reset_confirm'),
     path('resetpasswordcomplete/',
          auth_views.PasswordResetCompleteView.as_view(template_name = "detection/password_reset_done.html"),
-         name ='resetpasswordcomplete'),
+         name ='password_reset_complete'),
     path('alert/<uuid:pk>/',views.alert, name='alert'),         
 
 ]
