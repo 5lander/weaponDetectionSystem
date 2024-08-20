@@ -12,16 +12,29 @@ https://docs.djangoproject.com/en/3.1/ref/settings/
 
 from pathlib import Path
 import os
-
+from dotenv import load_dotenv
+load_dotenv()
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+dotenv_file = os.path.join(BASE_DIR, ".env")
+if os.path.isfile(dotenv_file):
+    dotenv.load_dotenv(dotenv_file)
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/3.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = '=_c&@2d9mnw8%7k@d+6q^+&4)hek2j#0-t2bzyk1$b$+^jf73y'
+SECRET_KEY = os.environ['SECRET_KEY']
+
+if not SECRET_KEY:
+    raise Exception("No SECRET_KEY set in environment. Please check your .env file.")
+
+#print("Current working directory:", os.getcwd())
+#print("Contents of current directory:", os.listdir())
+#print("SECRET_KEY from env:", os.getenv('SECRET_KEY'))
+#print("All environment variables:", os.environ)
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
@@ -38,11 +51,13 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'rest_framework',
     'detection',
     'alertuploadREST',
+    'django_filters',
     'rest_framework.authtoken',
-    'rest_framework',
     'django_extensions',
+    'storages',
 ]
 
 MIDDLEWARE = [
@@ -132,3 +147,11 @@ STATICFILES_DIRS =[
 ]
 
 MEDIA_ROOT = 'static/images'
+
+
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = os.environ['EMAIL_HOST_USER']
+EMAIL_HOST_PASSWORD = os.environ['EMAIL_HOST_PASSWORD']

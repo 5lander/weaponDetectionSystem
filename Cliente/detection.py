@@ -23,8 +23,8 @@ class Detection(QThread):
         self.location = location
         self.receiver = receiver
         self.last_capture_time = 0
-        self.capture_interval = 2  # Intervalo de captura en segundos
-        self.frame_skip = 1  # Procesar 1 frame cada 10 frames
+        self.capture_interval = 2  
+        self.frame_skip = 1  
         self.frame_count = 0
 
     def monitor_resources(self):
@@ -105,7 +105,7 @@ class Detection(QThread):
 
     def saveDetection(self, frame):
         cv2.imwrite("savedFrame/frame.jpg", frame)
-        print('Frame Saved')
+        print('Frame Guardado')
         self.postDetection()
 
     def postDetection(self):
@@ -117,9 +117,9 @@ class Detection(QThread):
             response = requests.post(url, files=files, headers=headers, data=data)
 
             if response.ok:
-                print('Alert was sent to the server')
+                print('Se ha enviado la alerta al servidor')
             else:
-                print('Unable to send alert to the server')
+                print('No se puede enviar la alerta al servidor')
         except Exception as e:
             print(f'Error al acceder al servidor: {str(e)}')
             print(traceback.format_exc())

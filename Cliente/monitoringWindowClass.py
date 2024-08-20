@@ -13,7 +13,7 @@ class MonitoringWindow(QMainWindow):
         self.startMonitoring.clicked.connect(self.goToMonitoringPage)
         self.popup = QMessageBox()
         self.popup.setWindowTitle("Failed")
-        self.popup.setText("Fields must not be empty.")
+        self.popup.setText("Los campso no deben estar vacios.")
 
     def displayInfo(self):
         self.show()
