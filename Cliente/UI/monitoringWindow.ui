@@ -150,7 +150,7 @@
      <string>Monitorea</string>
     </property>
    </widget>
-   <widget class="QPushButton" name="CerrarSesion">
+   <widget class="QPushButton" name="logoutButton">
     <property name="geometry">
      <rect>
       <x>200</x>
