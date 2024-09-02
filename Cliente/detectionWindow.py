@@ -1,46 +1,64 @@
 from PyQt5.QtWidgets import QMainWindow, QLabel
-from PyQt5.uic import loadUi
-from PyQt5.QtCore import pyqtSlot
+from PyQt5.QtCore import pyqtSignal, pyqtSlot
 from PyQt5.QtGui import QImage, QPixmap
+from PyQt5.uic import loadUi
 from detection import Detection
-
+import os
+import sys
 
 class DetectionWindow(QMainWindow):
-    def __init__(self):
+    closed = pyqtSignal()
+
+    def __init__(self, token, location, receiver):
         super(DetectionWindow, self).__init__()
-        loadUi('UI/monitoringCameraWindow.ui', self)
-        self.model_path = "model/predict.pt"  
+        ui_file = self.resource_path('UI/monitoringCameraWindow.ui')
+        loadUi(ui_file, self)
+        self.token = token
+        self.location = location
+        self.receiver = receiver
+        self.model_path = self.resource_path("model/predict.pt")
         self.detection = None
-        self.stopButton.clicked.connect(self.close)
+        self.stopButton.clicked.connect(self.close_detection)
         self.cpuLabel = getattr(self, 'cpuLabel', QLabel("CPU: 0%", self))
         self.memoryLabel = getattr(self, 'memoryLabel', QLabel("Memoria: 0%", self))
         self.gpuLabel = getattr(self, 'gpuLabel', QLabel("GPU: 0%", self))
 
         [label.move(10, y) for label, y in zip(
-        [self.cpuLabel, self.memoryLabel, self.gpuLabel],
-        [10, 40, 70]
+            [self.cpuLabel, self.memoryLabel, self.gpuLabel],
+            [10, 40, 70]
         )]
 
-    def createDetectionInstance(self,token,location,receiver):
-        if self.detection is None:
-            self.detection = Detection(self.model_path, token,location, receiver)
-            self.detection.resourceUpdate.connect(self.updateResourceInfo)
+        self.createDetectionInstance()
 
-    def updateResourceInfo(self, resources):
-        getattr(self, 'cpuLabel', None) and self.cpuLabel.setText(f"CPU: {resources['cpu']:.1f}%")
-        getattr(self, 'memoryLabel', None) and self.memoryLabel.setText(f"Memoria: {resources['memory']:.1f}%")
-        'gpu_load' in resources and getattr(self, 'gpuLabel', None) and self.gpuLabel.setText(f"GPU: {resources['gpu_load']:.1f}%")
+    def createDetectionInstance(self):
+        if self.detection is None:
+            self.detection = Detection(self.model_path, self.token, self.location, self.receiver)
+            self.detection.changePixmap.connect(self.setImage)
+            self.detection.resourceUpdate.connect(self.updateResourceInfo)
+            self.detection.start()
 
     @pyqtSlot(QImage)
     def setImage(self, image):
         self.CameraLabel.setPixmap(QPixmap.fromImage(image))
-        
-    def startDetection(self):
-        if self.detection:
-            self.detection.changePixmap.connect(self.setImage)
-            self.detection.start()
-        self.show()
+
+    def updateResourceInfo(self, resources):
+        self.cpuLabel.setText(f"CPU: {resources['cpu']:.1f}%")
+        self.memoryLabel.setText(f"Memoria: {resources['memory']:.1f}%")
+        if 'gpu_load' in resources:
+            self.gpuLabel.setText(f"GPU: {resources['gpu_load']:.1f}%")
+
 
     def closeEvent(self, event):
-        self.detection.running = False if self.detection else None
+        self.close_detection()
+        self.closed.emit()
         event.accept()
+
+    def close_detection(self):
+        if self.detection:
+            self.detection.stop()
+            self.detection.wait()
+
+    def resource_path(self, relative_path):
+        if hasattr(sys, '_MEIPASS'):
+            return os.path.join(sys._MEIPASS, relative_path)
+        return os.path.join(os.path.abspath("."), relative_path)
