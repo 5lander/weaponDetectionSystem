@@ -9,6 +9,7 @@ import numpy as np
 import psutil
 import GPUtil
 import requests
+import logging
 
 class Detection(QThread):
     changePixmap = pyqtSignal(QImage)
@@ -31,28 +32,32 @@ class Detection(QThread):
         self.model = None
         self.running = False
         self.cap = None
+        logging.info("Instancia de Detection inicializada")
 
     def run(self):
         self.running = True
         
         try:
             self.model = YOLO(self.model_path)
-            print("Modelo YOLO cargado exitosamente.")
+            logging.info("Modelo YOLO cargado exitosamente.")
         except Exception as e:
-            self.error.emit(f"Error al cargar el modelo YOLO: {str(e)}")
+            error_msg = f"Error al cargar el modelo YOLO: {str(e)}"
+            self.error.emit(error_msg)
+            logging.error(error_msg)
             self.running = False
             return
 
-        # Intenta diferentes backends de captura
         backends = [cv2.CAP_DSHOW, cv2.CAP_MSMF, cv2.CAP_ANY]
         for backend in backends:
             self.cap = cv2.VideoCapture(0 + backend)
             if self.cap.isOpened():
-                print(f"Cámara abierta con backend: {backend}")
+                logging.info(f"Cámara abierta con backend: {backend}")
                 break
         
         if not self.cap.isOpened():
-            self.error.emit("Error: No se pudo abrir la cámara con ningún backend.")
+            error_msg = "Error: No se pudo abrir la cámara con ningún backend."
+            self.error.emit(error_msg)
+            logging.error(error_msg)
             self.running = False
             return
 
@@ -64,12 +69,14 @@ class Detection(QThread):
             if not ret:
                 retry_count += 1
                 if retry_count > max_retries:
-                    self.error.emit("Error: No se pudo leer el frame de la cámara después de varios intentos.")
+                    error_msg = "Error: No se pudo leer el frame de la cámara después de varios intentos."
+                    self.error.emit(error_msg)
+                    logging.error(error_msg)
                     break
                 time.sleep(1)
                 continue
             
-            retry_count = 0  # Resetear el contador si se lee un frame exitosamente
+            retry_count = 0  
 
             self.frame_count += 1
 
@@ -77,7 +84,9 @@ class Detection(QThread):
                 try:
                     self.process_frame(frame)
                 except Exception as e:
-                    self.error.emit(f"Error durante el procesamiento del frame: {str(e)}")
+                    error_msg = f"Error durante el procesamiento del frame: {str(e)}"
+                    self.error.emit(error_msg)
+                    logging.error(error_msg)
 
             self.update_ui(frame)
             self.check_resources()
@@ -132,7 +141,7 @@ class Detection(QThread):
                             'gpu_memory': gpu.memoryUsed / gpu.memoryTotal * 100
                         }
                 except Exception as e:
-                    print(f"Error al obtener información de la GPU: {str(e)}")
+                    logging.warning(f"Error al obtener información de la GPU: {str(e)}")
 
                 resources = {
                     'cpu': cpu_percent,
@@ -141,8 +150,11 @@ class Detection(QThread):
                 }
                 
                 self.resourceUpdate.emit(resources)
+                logging.debug(f"Recursos actualizados: CPU {cpu_percent:.1f}%, Memoria {memory_percent:.1f}%, GPU {gpu_info.get('gpu_load', 'N/A')}")
             except Exception as e:
-                self.error.emit(f"Error al monitorear recursos: {str(e)}")
+                error_msg = f"Error al monitorear recursos: {str(e)}"
+                self.error.emit(error_msg)
+                logging.error(error_msg)
             
             self.last_resource_check = current_time
 
@@ -152,10 +164,12 @@ class Detection(QThread):
             if not os.path.exists(save_path):
                 os.makedirs(save_path)
             cv2.imwrite(os.path.join(save_path, "frame.jpg"), frame)
-            print('Frame Guardado')
+            logging.info('Frame Guardado')
             self.postDetection()
         except Exception as e:
-            self.error.emit(f"Error al guardar la detección: {str(e)}")
+            error_msg = f"Error al guardar la detección: {str(e)}"
+            self.error.emit(error_msg)
+            logging.error(error_msg)
 
     def postDetection(self):
         try:
@@ -167,23 +181,32 @@ class Detection(QThread):
             response = requests.post(url, files=files, headers=headers, data=data, timeout=30)
 
             if response.ok:
-                print('Se ha enviado la alerta al servidor')
+                logging.info('Se ha enviado la alerta al servidor')
             else:
-                self.error.emit(f'Error al enviar la alerta al servidor. Código de estado: {response.status_code}')
+                error_msg = f'Error al enviar la alerta al servidor. Código de estado: {response.status_code}'
+                self.error.emit(error_msg)
+                logging.error(error_msg)
         except requests.exceptions.Timeout:
-            self.error.emit('Tiempo de espera agotado al intentar conectar con el servidor')
+            error_msg = 'Tiempo de espera agotado al intentar conectar con el servidor'
+            self.error.emit(error_msg)
+            logging.error(error_msg)
         except requests.exceptions.ConnectionError:
-            self.error.emit('Error de conexión al intentar conectar con el servidor')
+            error_msg = 'Error de conexión al intentar conectar con el servidor'
+            self.error.emit(error_msg)
+            logging.error(error_msg)
         except Exception as e:
-            self.error.emit(f'Error al acceder al servidor: {str(e)}')
+            error_msg = f'Error al acceder al servidor: {str(e)}'
+            self.error.emit(error_msg)
+            logging.error(error_msg)
 
     def cleanup(self):
         if self.cap:
             self.cap.release()
-        print("Hilo de detección terminado.")
+        logging.info("Hilo de detección terminado.")
 
     def stop(self):
         self.running = False
+        logging.info("Deteniendo el hilo de detección")
 
     def resource_path(self, relative_path):
         if hasattr(sys, '_MEIPASS'):
