@@ -135,9 +135,9 @@
    <widget class="QPushButton" name="startMonitoring">
     <property name="geometry">
      <rect>
-      <x>100</x>
+      <x>50</x>
       <y>270</y>
-      <width>150</width>
+      <width>111</width>
       <height>25</height>
      </rect>
     </property>
@@ -148,6 +148,24 @@
     </property>
     <property name="text">
      <string>Monitorea</string>
+    </property>
+   </widget>
+   <widget class="QPushButton" name="logoutButton">
+    <property name="geometry">
+     <rect>
+      <x>200</x>
+      <y>270</y>
+      <width>111</width>
+      <height>25</height>
+     </rect>
+    </property>
+    <property name="font">
+     <font>
+      <family>Arial</family>
+     </font>
+    </property>
+    <property name="text">
+     <string>Cerrar Sesion</string>
     </property>
    </widget>
   </widget>
