@@ -7,6 +7,7 @@ import os
 import sys
 import traceback
 import webbrowser
+import logging
 
 class LoginWindow(QMainWindow):
     loginSuccessful = pyqtSignal(str)
@@ -18,6 +19,7 @@ class LoginWindow(QMainWindow):
         self.registerButton.clicked.connect(self.goToRegisterPage)
         self.loginButton.clicked.connect(self.login)
         self.setWindowTitle("Login - Weapon Detection")
+        logging.info("Ventana de login inicializada")
 
     def login(self):
         username = self.usernameInput.text()
@@ -31,16 +33,16 @@ class LoginWindow(QMainWindow):
             url = 'http://127.0.0.1:8000/api/get_auth_token/'
             response = requests.post(url, data={'username': username, 'password': password}, timeout=10)
             
-            print(f"Código de estado de la respuesta: {response.status_code}")
-            print(f"Contenido de la respuesta: {response.text}")
+            logging.debug(f"Código de estado de la respuesta: {response.status_code}")
+            logging.debug(f"Contenido de la respuesta: {response.text}")
 
             if response.ok:
                 try:
                     json_response = response.json()
                     if 'token' in json_response:
                         self.loginSuccessful.emit(json_response['token'])
-                        self.close()  # Cerrar la ventana de inicio de sesión después de un inicio de sesión exitoso
-                        print("Inicio de sesión exitoso. Token recibido.")
+                        self.close()
+                        logging.info("Inicio de sesión exitoso. Token recibido.")
                     else:
                         self.showErrorMessage("Error de inicio de sesión", "La respuesta del servidor no contiene un token.")
                 except json.JSONDecodeError:
@@ -59,7 +61,7 @@ class LoginWindow(QMainWindow):
             error_message = f"Ocurrió un error inesperado: {str(e)}\n\n"
             error_message += traceback.format_exc()
             self.showErrorMessage("Error inesperado", error_message)
-            print(error_message)  # Imprimir el error en la consola para depuración
+            logging.error(error_message)
 
     def showErrorMessage(self, title, message):
         error_box = QMessageBox()
@@ -67,6 +69,7 @@ class LoginWindow(QMainWindow):
         error_box.setWindowTitle(title)
         error_box.setText(message)
         error_box.exec_()
+        logging.warning(f"Error mostrado al usuario: {title} - {message}")
 
     def resource_path(self, relative_path):
         if hasattr(sys, '_MEIPASS'):
@@ -76,8 +79,12 @@ class LoginWindow(QMainWindow):
     def goToRegisterPage(self):
         try:
             webbrowser.open('http://127.0.0.1:8000/register/')
-            print("Página de registro abierta en el navegador.")
+            logging.info("Página de registro abierta en el navegador.")
         except Exception as e:
             error_message = f"No se pudo abrir la página de registro: {str(e)}"
             self.showErrorMessage("Error al abrir la página de registro", error_message)
-            print(error_message)  # Imprimir el error en la consola para depuración
+            logging.error(error_message)
+
+    def closeEvent(self, event):
+        logging.info("Ventana de login cerrada")
+        super().closeEvent(event)
