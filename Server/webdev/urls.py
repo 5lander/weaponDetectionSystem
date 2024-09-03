@@ -23,5 +23,6 @@ from django.conf.urls import url
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('', include('detection.urls')),
-    url(r'^api/', include(('alertuploadREST.urls', 'alertuploadREST'), namespace='api')),    
-]
+    url(r'^api/', include(('alertuploadREST.urls', 'alertuploadREST'), namespace='api')),
+]+ static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+

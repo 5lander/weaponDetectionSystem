@@ -94,7 +94,7 @@
 
 			<tr>
 				<td class="w-25"><img style="max-width: 250px; max-height: 150x; border-radius: 2.5%;" 
-					class="img-fluid" src='http://127.0.0.1:8000/static/images/{{alert.image}}'/></td>
+					class="img-fluid" src='{{ alert.image.url }}'/></td>
 				<td>{{alert.location}}</td>
 				<td>{{alert.alertReceiver}}</td>
 				<td>{{alert.dateCreated|date:"Y-m-d H:i:s"}}</td>
