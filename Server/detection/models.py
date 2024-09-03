@@ -8,6 +8,8 @@ from django.dispatch import receiver
 from rest_framework.authtoken.models import Token
 
 from django.contrib.auth.models import User
+from webdev.storage_backends import PublicMediaStorage
+from django.conf import settings
 
 # Changes uploaded file name
 def scrambleUploadedFilename(instance, filename):
@@ -22,7 +24,7 @@ def scrambleUploadedFilename(instance, filename):
 
 # Data model
 class UploadAlert(models.Model):
-    image = models.ImageField("Uploaded image", upload_to=scrambleUploadedFilename)
+    image = models.ImageField("Uploaded image", upload_to=scrambleUploadedFilename,storage=PublicMediaStorage())
     userID = models.ForeignKey(Token, on_delete=models.CASCADE)
     alertReceiver = models.CharField(max_length=200)
     location = models.CharField(max_length=200)
