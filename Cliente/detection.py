@@ -159,7 +159,7 @@ class Detection(QThread):
 
     def postDetection(self):
         try:
-            url = 'http://127.0.0.1:8000/api/images/'
+            url = 'https://weapondetectionsystem.onrender.com/api/images/'
             headers = {'Authorization': 'Token ' + self.token}
             files = {'image': open(self.resource_path('savedFrame/frame.jpg'), 'rb')}
             data = {'userID': self.token, 'location': self.location, 'alertReceiver': self.receiver}

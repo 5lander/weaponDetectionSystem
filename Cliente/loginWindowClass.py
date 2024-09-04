@@ -28,7 +28,7 @@ class LoginWindow(QMainWindow):
             return
 
         try:
-            url = 'http://127.0.0.1:8000/api/get_auth_token/'
+            url = 'https://weapondetectionsystem.onrender.com/api/get_auth_token/'
             response = requests.post(url, data={'username': username, 'password': password}, timeout=10)
             
             print(f"Código de estado de la respuesta: {response.status_code}")
@@ -75,7 +75,7 @@ class LoginWindow(QMainWindow):
 
     def goToRegisterPage(self):
         try:
-            webbrowser.open('http://127.0.0.1:8000/register/')
+            webbrowser.open('https://weapondetectionsystem.onrender.com/register/')
             print("Página de registro abierta en el navegador.")
         except Exception as e:
             error_message = f"No se pudo abrir la página de registro: {str(e)}"
