@@ -11,6 +11,9 @@ from .filters import DetectionFilter
 from .models import UploadAlert
 
 from rest_framework.authtoken.models import Token
+from django.conf import settings
+
+
 
 def loginPage(request):
 	if request.user.is_authenticated:
@@ -55,17 +58,15 @@ def logoutUser(request):
 
 @login_required(login_url='login')
 def home(request):
+    token = Token.objects.get(user=request.user)
+    uploadAlert = UploadAlert.objects.filter(userID=token)
 
-	token = Token.objects.get(user=request.user)
 
-	uploadAlert = UploadAlert.objects.filter(userID = token)
+    myFilter = DetectionFilter(request.GET, queryset=uploadAlert)
+    uploadAlert = myFilter.qs 
 
-	myFilter = DetectionFilter(request.GET, queryset=uploadAlert)
-	uploadAlert = myFilter.qs 
-
-	context = {'myFilter':myFilter, 'uploadAlert':uploadAlert}
-
-	return render(request, 'detection/dashboard.html', context)
+    context = {'myFilter':myFilter, 'uploadAlert':uploadAlert}
+    return render(request, 'detection/dashboard.html', context)
 
 
 def alert(request, pk):
