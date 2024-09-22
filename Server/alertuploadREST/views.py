@@ -68,7 +68,7 @@ def prepare_alert_message(serializer):
     uuid_with_slashes = split(serializer.data['image'], ".")
     uuid = split(uuid_with_slashes[3], "/")
 
-    url = 'http://127.0.0.1:8000/alert' + uuid[2]
+    url = 'https://weapondetectionsystem.onrender.com/alert' + uuid[2]
 
     return 'Weapon Detected! View alert at ' + url
 
