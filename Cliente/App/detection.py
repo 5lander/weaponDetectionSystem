@@ -227,7 +227,7 @@ class Detection(QThread):
                         conf = float(box.conf[0])
                         cls = int(box.cls[0])
 
-                        if conf > 0.5:
+                        if conf > 0.75:
                             x1, y1, x2, y2 = map(int, box.xyxy[0])
                             color = self.colors.get(cls, (255, 255, 255))
                             
