@@ -3,9 +3,9 @@ import os
 import logging
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtCore import QObject, QSharedMemory
-from loginWindowClass import LoginWindow
-from monitoringWindowClass import MonitoringWindow
-from detectionWindow import DetectionWindow
+from App.loginWindowClass import LoginWindow
+from App.monitoringWindowClass import MonitoringWindow
+from App.detectionWindow import DetectionWindow
 
 def setup_logging():
     try:
