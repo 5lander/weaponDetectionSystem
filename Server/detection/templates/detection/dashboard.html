@@ -1,117 +1,960 @@
-{%  extends 'detection/main.html' %}
+{% extends 'detection/main.html' %}
 
 {% block content %}
 
 {% load event_tags %}
 {% load static %}
 
-<div class="limiter">
-<div class="container-login100 p-b-0 p-t-0">
-	<div class="wrap-login100 p-l-30 p-r-30 p-t-20 p-b-20">
-		<div class="Search">
-			<form method="get">
-				<div class="row">
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Weapon Detection System - Dashboard</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  
+  <style>
+    * {
+      padding: 0;
+      margin: 0;
+      color: #1a1f36;
+      box-sizing: border-box;
+      word-wrap: break-word;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica Neue, Ubuntu, sans-serif;
+    }
 
-					<div class="col">
-						<!-- Location Input -->
-						<input class="form-control" type="text"  placeholder="Location"
-						name="{{ myFilter.form.location.name }}"
-						id="{{ myFilter.form.location.id_for_label }}"
-						{% if myFilter.form.location.value != None %}value="{{ myFilter.form.location.value|stringformat:'s' }}"{% endif %}
-						maxlength="{{ myFilter.form.location.field.max_length }}"
-						{% if myFilter.form.location.field.required %}required{% endif %}>
-					</div>
+    body {
+        min-height: 100%;
+        background-color: #0f172a;
+        color: #fff;
+    }
 
-					<div class="col">
-						<!-- Alert was sent to Input -->
-						<input class="form-control" type="text"  placeholder="Alert was sent to"
-						name="{{ myFilter.form.alertReceiver.name }}"
-						id="{{ myFilter.form.alertReceiver.id_for_label }}"
-						{% if myFilter.form.alertReceiver.value != None %}value="{{ myFilter.form.alertReceiver.value|stringformat:'s' }}"{% endif %}
-						maxlength="{{ myFilter.form.alertReceiver.field.max_length }}"
-						{% if myFilter.form.alertReceiver.field.required %}required{% endif %}>
-					</div>
+    .dashboard-root {
+        background: #0f172a;
+        min-height: 100vh;
+        position: relative;
+    }
 
-					<div class="col-2">
-						<!-- Start Date Input -->
-						<input class="form-control" type="text" id="date" placeholder="Start Date" autocomplete="off"
-						name="{{ myFilter.form.startDate.name }}"
-						id="{{ myFilter.form.startDate.id_for_label }}"
-						{% if myFilter.form.startDate.value != None %}value="{{ myFilter.form.startDate.value|stringformat:'s' }}"{% endif %}
-						maxlength="{{ myFilter.form.startDate.field.max_length }}"
-						{% if myFilter.form.startDate.field.required %}required{% endif %}>
-					</div>
+    .dashboard-background {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        top: 0;
+        z-index: 0;
+        overflow: hidden;
+    }
 
-					<div class="col-2">
-						<!-- End Date Input Input -->
-						<input class="form-control" type="text" id="date" placeholder="End Date" autocomplete="off"
-						name="{{ myFilter.form.endDate.name }}"
-						id="{{ myFilter.form.endDate.id_for_label }}"
-						{% if myFilter.form.endDate.value != None %}value="{{ myFilter.form.endDate.value|stringformat:'s' }}"{% endif %}
-						maxlength="{{ myFilter.form.endDate.field.max_length }}"
-						{% if myFilter.form.endDate.field.required %}required{% endif %}>
-					</div>
+    .dashboard-background-grid {
+        display: grid;
+        grid-template-columns: [start] 1fr [left-gutter] repeat(16,86.6px) [left-gutter] 1fr [end];
+        grid-template-rows: [top] 1fr [top-gutter] repeat(8,64px) [bottom-gutter] 1fr [bottom];
+        justify-content: center;
+        margin: 0 -2%;
+        transform: rotate(-12deg) skew(-12deg);
+    }
 
-					<div class="col-1">
-						<button class="btn btn-primary" type="submit">Search</button>
-					</div>
-				  </div>
-			</form>
-		</div>
-		
-</div>
-</div>
-</div>
+    .bg-element {
+        box-sizing: border-box;
+    }
 
-   <script>
-	jQuery(document).ready(function($){
-	  var date_input=$('input[id="date"]');
-	  var container=$('.bootstrap-iso form').length>0 ? $('.bootstrap-iso form').parent() : "body";
-	  var options={
-		format: 'yyyy-mm-dd',
-		container: container,
-		todayHighlight: true,
-		autoclose: true,
-	  };
-	  date_input.datepicker(options);
-	});
-	</script>
-	
-<div class="limiter">
-<div class="container-login100 p-t-0">
-	<div class="wrap-login100 p-l-40 p-r-40 p-t-25 p-b-15">
-		
-		<table class="table table-image">
-			<tr>
-				<th scope="col" class="top-row">Detection</th>
-				<th scope="col" class="top-row">Location</th>
-				<th scope="col" class="top-row">Alert was sent to</th>
-				<th scope="col" class="top-row">Time</th>
-				<th scope="col" class="top-row">Alert</th>
-			</tr>
+    .bg-blue {
+        background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+    }
 
-			{% for alert in uploadAlert %}
+    .bg-dark {
+        background: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%);
+    }
 
-			<tr>
-				<td class="w-25"><img style="max-width: 250px; max-height: 150x; border-radius: 2.5%;" 
-					class="img-fluid" src='{{ alert.image.url }}'/></td>
-				<td>{{alert.location}}</td>
-				<td>{{alert.alertReceiver}}</td>
-				<td>{{alert.dateCreated|date:"Y-m-d H:i:s"}}</td>
-				
-				{% with uuid=alert.image|split:"." %}
+    .bg-gray {
+        background-color: #374151;
+    }
 
-				<td><a class="btn btn-sm btn-info" href="/alert/{{uuid.0}}">View</a></td>
+    .bg-cyan {
+        background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+    }
 
-				{% endwith %}
-				
-			</tr>
-			{% endfor %}
+    .bg-border {
+        box-shadow: inset 0 0 0 2px #334155;
+    }
 
-		</table>
-	
-	</div>
-</div>
-</div>
+    .animate-left {
+        animation: slideLeft 3s ease-in-out infinite;
+    }
+
+    .animate-right {
+        animation: slideRight 4s ease-in-out infinite;
+    }
+
+    @keyframes slideLeft {
+      0%, 100% { transform: translateX(0px); }
+      50% { transform: translateX(1000px); }
+    }
+
+    @keyframes slideRight {
+      0%, 100% { transform: translateX(0px); }
+      50% { transform: translateX(-1000px); }
+    }
+
+    .dashboard-container {
+        position: relative;
+        z-index: 1;
+        padding: 2rem;
+        max-width: 1400px;
+        margin: 0 auto;
+    }
+
+    .dashboard-header {
+        text-align: center;
+        margin-bottom: 3rem;
+    }
+
+    .dashboard-title {
+        color: white;
+        font-size: 2.5rem;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 1rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .dashboard-title i {
+        color: #3b82f6;
+        font-size: 2.8rem;
+    }
+
+    .dashboard-subtitle {
+        color: rgba(255, 255, 255, 0.7);
+        font-size: 1.1rem;
+        font-weight: 400;
+    }
+
+    .search-card {
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(20px);
+        border-radius: 20px;
+        padding: 2.5rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
+    }
+
+    .search-title {
+        color: #1a1f36;
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin-bottom: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .search-title i {
+        color: #3b82f6;
+    }
+
+    .search-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr 200px 200px auto;
+        gap: 1rem;
+        align-items: end;
+    }
+
+    .form-group {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .form-label {
+        color: #374151;
+        font-size: 0.875rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+    }
+
+    .form-input {
+        font-size: 1rem;
+        padding: 0.75rem 1rem;
+        border: 2px solid #e2e8f0;
+        border-radius: 12px;
+        outline: none;
+        background-color: #f8fafc;
+        transition: all 0.3s ease;
+        font-family: 'Inter', sans-serif;
+        color: #1a1f36;
+    }
+
+    .form-input:focus {
+        border-color: #3b82f6;
+        background-color: white;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+
+    .search-btn {
+        background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+        color: white;
+        font-weight: 600;
+        cursor: pointer;
+        border: none;
+        border-radius: 12px;
+        padding: 0.75rem 1.5rem;
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
+        height: fit-content;
+    }
+
+    .search-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px rgba(59, 130, 246, 0.3);
+    }
+
+    .results-card {
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(20px);
+        border-radius: 20px;
+        padding: 2.5rem;
+        box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
+    }
+
+    .results-title {
+        color: #1a1f36;
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin-bottom: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .results-title i {
+        color: #3b82f6;
+    }
+
+    .results-table {
+        width: 100%;
+        border-collapse: collapse;
+        border-spacing: 0;
+    }
+
+    .results-table th {
+        background: linear-gradient(135deg, #f1f5f9 0%, #e2e8f0 100%);
+        color: #374151;
+        font-weight: 600;
+        padding: 1rem;
+        text-align: left;
+        border-bottom: 2px solid #e2e8f0;
+        font-size: 0.875rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    .results-table th:first-child {
+        border-radius: 12px 0 0 0;
+    }
+
+    .results-table th:last-child {
+        border-radius: 0 12px 0 0;
+    }
+
+    .results-table td {
+        padding: 1.5rem 1rem;
+        border-bottom: 1px solid #e2e8f0;
+        vertical-align: middle;
+        color: #374151;
+    }
+
+    .results-table tr:hover {
+        background-color: rgba(59, 130, 246, 0.05);
+    }
+
+    .detection-image {
+        max-width: 200px;
+        max-height: 120px;
+        border-radius: 12px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        transition: transform 0.3s ease;
+    }
+
+    .detection-image:hover {
+        transform: scale(1.05);
+    }
+
+    .view-btn {
+        background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+        color: white;
+        font-weight: 500;
+        cursor: pointer;
+        border: none;
+        border-radius: 8px;
+        padding: 0.5rem 1rem;
+        transition: all 0.3s ease;
+        text-decoration: none;
+        display: inline-block;
+        font-size: 0.875rem;
+    }
+
+    .view-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 15px rgba(6, 182, 212, 0.3);
+        color: white;
+        text-decoration: none;
+    }
+
+    .location-cell, .receiver-cell {
+        font-weight: 500;
+    }
+
+    .time-cell {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.875rem;
+        color: #64748b;
+    }
+
+    /* Results Header */
+    .results-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+
+    .results-stats {
+        color: #64748b;
+        font-size: 0.9rem;
+        font-weight: 500;
+    }
+
+    /* No Results */
+    .no-results {
+        text-align: center;
+        padding: 4rem 2rem;
+        color: #64748b;
+    }
+
+    .no-results-content i {
+        font-size: 3rem;
+        color: #cbd5e1;
+        margin-bottom: 1rem;
+    }
+
+    .no-results-content h3 {
+        color: #374151;
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+    }
+
+    .no-results-content p {
+        color: #64748b;
+        font-size: 1rem;
+    }
+
+    /* Pagination Styles */
+    .pagination-container {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 2rem;
+        padding-top: 2rem;
+        border-top: 1px solid #e2e8f0;
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+
+    .pagination-info {
+        color: #64748b;
+        font-size: 0.9rem;
+        font-weight: 500;
+    }
+
+    .pagination-controls {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .pagination-numbers {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        margin: 0 1rem;
+    }
+
+    .pagination-btn {
+        padding: 0.5rem 0.75rem;
+        border-radius: 8px;
+        text-decoration: none;
+        font-weight: 500;
+        font-size: 0.875rem;
+        transition: all 0.3s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        border: 1px solid transparent;
+        min-width: 40px;
+        justify-content: center;
+    }
+
+    .pagination-btn-nav {
+        background: rgba(59, 130, 246, 0.1);
+        color: #3b82f6;
+        border-color: rgba(59, 130, 246, 0.2);
+        padding: 0.5rem 1rem;
+    }
+
+    .pagination-btn-nav:hover:not(.pagination-btn-disabled) {
+        background: rgba(59, 130, 246, 0.15);
+        color: #1d4ed8;
+        text-decoration: none;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 15px rgba(59, 130, 246, 0.2);
+    }
+
+    .pagination-btn-number {
+        background: white;
+        color: #374151;
+        border-color: #e2e8f0;
+    }
+
+    .pagination-btn-number:hover {
+        background: #f8fafc;
+        color: #1a1f36;
+        text-decoration: none;
+        border-color: #3b82f6;
+    }
+
+    .pagination-btn-current {
+        background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+        color: white;
+        border-color: #3b82f6;
+        font-weight: 600;
+        box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+    }
+
+    .pagination-btn-disabled {
+        background: #f1f5f9;
+        color: #94a3b8;
+        cursor: not-allowed;
+        border-color: #e2e8f0;
+    }
+
+    .pagination-dots {
+        color: #94a3b8;
+        padding: 0 0.5rem;
+        font-weight: 600;
+    }
+
+    /* Page Size Selector */
+    .page-size-selector {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .page-size-label {
+        color: #64748b;
+        font-size: 0.875rem;
+        font-weight: 500;
+    }
+
+    .page-size-select {
+        padding: 0.5rem 0.75rem;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        background: white;
+        color: #374151;
+        font-size: 0.875rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        min-width: 80px;
+    }
+
+    .page-size-select:focus {
+        outline: none;
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+
+    .page-size-select:hover {
+        border-color: #3b82f6;
+    }
+
+    /* Responsive */
+    @media (max-width: 1200px) {
+        .search-grid {
+            grid-template-columns: 1fr 1fr 150px 150px auto;
+            gap: 0.75rem;
+        }
+    }
+
+    @media (max-width: 992px) {
+        .search-grid {
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+        
+        .form-group:nth-child(3),
+        .form-group:nth-child(4) {
+            grid-column: span 1;
+        }
+        
+        .search-btn {
+            grid-column: span 2;
+            justify-self: center;
+            width: 200px;
+        }
+
+        .pagination-container {
+            flex-direction: column;
+            align-items: center;
+            gap: 1.5rem;
+        }
+
+        .pagination-controls {
+            order: 2;
+        }
+
+        .pagination-info {
+            order: 1;
+        }
+
+        .page-size-selector {
+            order: 3;
+        }
+    }
+
+    @media (max-width: 768px) {
+        .dashboard-container {
+            padding: 1rem;
+        }
+        
+        .search-card, .results-card {
+            padding: 1.5rem;
+        }
+        
+        .search-grid {
+            grid-template-columns: 1fr;
+            gap: 1rem;
+        }
+        
+        .search-btn {
+            width: 100%;
+        }
+        
+        .dashboard-title {
+            font-size: 2rem;
+        }
+        
+        .results-table {
+            font-size: 0.875rem;
+        }
+        
+        .detection-image {
+            max-width: 150px;
+            max-height: 90px;
+        }
+
+        .results-header {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 0.5rem;
+        }
+
+        .pagination-controls {
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .pagination-numbers {
+            margin: 0.5rem 0;
+        }
+
+        .pagination-btn-nav {
+            font-size: 0.8rem;
+            padding: 0.4rem 0.8rem;
+        }
+
+        .pagination-btn-number {
+            min-width: 35px;
+            font-size: 0.8rem;
+        }
+    }
+
+    @media (max-width: 480px) {
+        .results-table th,
+        .results-table td {
+            padding: 0.75rem 0.5rem;
+        }
+        
+        .detection-image {
+            max-width: 120px;
+            max-height: 72px;
+        }
+
+        .pagination-controls {
+            gap: 0.25rem;
+        }
+
+        .pagination-numbers {
+            display: none; /* Hide page numbers on very small screens */
+        }
+
+        .pagination-btn-nav {
+            font-size: 0.75rem;
+            padding: 0.4rem 0.6rem;
+        }
+
+        .page-size-selector {
+            flex-direction: column;
+            text-align: center;
+            gap: 0.25rem;
+        }
+
+        /* Show only essential pagination controls on mobile */
+        .pagination-container {
+            padding-top: 1rem;
+        }
+
+        .pagination-info {
+            font-size: 0.8rem;
+        }
+    }
+  </style>
+</head>
+
+<body>
+	min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  <!-- Incluir el navbar -->
+  {% include 'detection/navbar.html' %}
+
+  <div class="dashboard-root">
+    <!-- Animated Background -->
+    <div class="dashboard-background">
+      <div class="dashboard-background-grid">
+        <div class="bg-element" style="grid-area: top / start / 8 / end;">
+          <div style="background: linear-gradient(rgba(15, 23, 42, 0.8) 0%, rgba(30, 41, 59, 0.9) 33%); height: 100%;"></div>
+        </div>
+        <div class="bg-element bg-border animate-left" style="grid-area: 4 / 2 / auto / 5;"></div>
+        <div class="bg-element bg-dark" style="grid-area: 6 / start / auto / 2;"></div>
+        <div class="bg-element bg-blue animate-left" style="grid-area: 7 / start / auto / 4;"></div>
+        <div class="bg-element bg-gray animate-left" style="grid-area: 8 / 4 / auto / 6;"></div>
+        <div class="bg-element bg-cyan animate-right" style="grid-area: 2 / 15 / auto / end;"></div>
+        <div class="bg-element bg-blue animate-right" style="grid-area: 3 / 14 / auto / end;"></div>
+        <div class="bg-element bg-gray animate-right" style="grid-area: 4 / 17 / auto / 20;"></div>
+        <div class="bg-element bg-border animate-right" style="grid-area: 5 / 14 / auto / 17;"></div>
+      </div>
+    </div>
+
+    <!-- Dashboard Content -->
+    <div class="dashboard-container">
+      <!-- Header (ahora más pequeño porque tenemos navbar) -->
+      <div class="dashboard-header">
+        <p class="dashboard-subtitle">Security Dashboard - Real-time Monitoring</p>
+      </div>
+
+      <!-- Search Card -->
+      <div class="search-card">
+        <h2 class="search-title">
+          <i class="fas fa-search"></i>
+          Search & Filter
+        </h2>
+        <form method="get">
+          <div class="search-grid">
+            <div class="form-group">
+              <label class="form-label">Location</label>
+              <input class="form-input" type="text" placeholder="Enter location"
+                name="{{ myFilter.form.location.name }}"
+                id="{{ myFilter.form.location.id_for_label }}"
+                {% if myFilter.form.location.value != None %}value="{{ myFilter.form.location.value|stringformat:'s' }}"{% endif %}
+                maxlength="{{ myFilter.form.location.field.max_length }}"
+                {% if myFilter.form.location.field.required %}required{% endif %}>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Alert Receiver</label>
+              <input class="form-input" type="text" placeholder="Alert recipient"
+                name="{{ myFilter.form.alertReceiver.name }}"
+                id="{{ myFilter.form.alertReceiver.id_for_label }}"
+                {% if myFilter.form.alertReceiver.value != None %}value="{{ myFilter.form.alertReceiver.value|stringformat:'s' }}"{% endif %}
+                maxlength="{{ myFilter.form.alertReceiver.field.max_length }}"
+                {% if myFilter.form.alertReceiver.field.required %}required{% endif %}>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">Start Date</label>
+              <input class="form-input date-picker" type="text" placeholder="Start Date" autocomplete="off"
+                name="{{ myFilter.form.startDate.name }}"
+                id="{{ myFilter.form.startDate.id_for_label }}"
+                {% if myFilter.form.startDate.value != None %}value="{{ myFilter.form.startDate.value|stringformat:'s' }}"{% endif %}
+                maxlength="{{ myFilter.form.startDate.field.max_length }}"
+                {% if myFilter.form.startDate.field.required %}required{% endif %}>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">End Date</label>
+              <input class="form-input date-picker" type="text" placeholder="End Date" autocomplete="off"
+                name="{{ myFilter.form.endDate.name }}"
+                id="{{ myFilter.form.endDate.id_for_label }}"
+                {% if myFilter.form.endDate.value != None %}value="{{ myFilter.form.endDate.value|stringformat:'s' }}"{% endif %}
+                maxlength="{{ myFilter.form.endDate.field.max_length }}"
+                {% if myFilter.form.endDate.field.required %}required{% endif %}>
+            </div>
+
+            <button class="search-btn" type="submit">
+              <i class="fas fa-search"></i>
+              Search
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Results Card -->
+      <div class="results-card">
+        <div class="results-header">
+          <h2 class="results-title">
+            <i class="fas fa-exclamation-triangle"></i>
+            Detection Results
+          </h2>
+          <div class="results-stats">
+            <span class="stats-text">
+              Showing {{ uploadAlert|length }} of {{ total_results|default:"0" }} results
+            </span>
+          </div>
+        </div>
+        
+        <table class="results-table">
+          <thead>
+            <tr>
+              <th>Detection</th>
+              <th>Location</th>
+              <th>Alert Receiver</th>
+              <th>Timestamp</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for alert in uploadAlert %}
+            <tr>
+              <td>
+                <img class="detection-image" src='{{ alert.image.url }}' alt="Detection Image"/>
+              </td>
+              <td class="location-cell">{{ alert.location }}</td>
+              <td class="receiver-cell">{{ alert.alertReceiver }}</td>
+              <td class="time-cell">{{ alert.dateCreated|date:"Y-m-d H:i:s" }}</td>
+              <td>
+                {% with uuid=alert.image|split:"." %}
+                <a class="view-btn" href="/alert/{{ uuid.0 }}">
+                  <i class="fas fa-eye"></i>
+                  View Details
+                </a>
+                {% endwith %}
+              </td>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="5" class="no-results">
+                <div class="no-results-content">
+                  <i class="fas fa-search"></i>
+                  <h3>No alerts found</h3>
+                  <p>Try adjusting your search criteria</p>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+
+        <!-- Pagination Controls -->
+        {% if uploadAlert.has_other_pages %}
+        <div class="pagination-container">
+          <div class="pagination-info">
+            <span class="pagination-text">
+              Page {{ uploadAlert.number }} of {{ uploadAlert.paginator.num_pages }}
+            </span>
+          </div>
+          
+          <div class="pagination-controls">
+            <!-- First Page -->
+            {% if uploadAlert.has_previous %}
+              <a href="?{% for key, value in request.GET.items %}{% if key != 'page' %}{{ key }}={{ value }}&{% endif %}{% endfor %}page=1" 
+                 class="pagination-btn pagination-btn-nav" title="First Page">
+                <i class="fas fa-angle-double-left"></i>
+              </a>
+            {% else %}
+              <span class="pagination-btn pagination-btn-nav pagination-btn-disabled">
+                <i class="fas fa-angle-double-left"></i>
+              </span>
+            {% endif %}
+
+            <!-- Previous Page -->
+            {% if uploadAlert.has_previous %}
+              <a href="?{% for key, value in request.GET.items %}{% if key != 'page' %}{{ key }}={{ value }}&{% endif %}{% endfor %}page={{ uploadAlert.previous_page_number }}" 
+                 class="pagination-btn pagination-btn-nav" title="Previous Page">
+                <i class="fas fa-angle-left"></i>
+                Previous
+              </a>
+            {% else %}
+              <span class="pagination-btn pagination-btn-nav pagination-btn-disabled">
+                <i class="fas fa-angle-left"></i>
+                Previous
+              </span>
+            {% endif %}
+
+            <!-- Page Numbers -->
+            <div class="pagination-numbers">
+              {% for num in uploadAlert.paginator.page_range %}
+                {% if uploadAlert.number == num %}
+                  <span class="pagination-btn pagination-btn-number pagination-btn-current">{{ num }}</span>
+                {% elif num > uploadAlert.number|add:'-3' and num < uploadAlert.number|add:'3' %}
+                  <a href="?{% for key, value in request.GET.items %}{% if key != 'page' %}{{ key }}={{ value }}&{% endif %}{% endfor %}page={{ num }}" 
+                     class="pagination-btn pagination-btn-number">{{ num }}</a>
+                {% elif num == 1 or num == uploadAlert.paginator.num_pages %}
+                  <a href="?{% for key, value in request.GET.items %}{% if key != 'page' %}{{ key }}={{ value }}&{% endif %}{% endfor %}page={{ num }}" 
+                     class="pagination-btn pagination-btn-number">{{ num }}</a>
+                {% elif num == uploadAlert.number|add:'-4' or num == uploadAlert.number|add:'4' %}
+                  <span class="pagination-dots">...</span>
+                {% endif %}
+              {% endfor %}
+            </div>
+
+            <!-- Next Page -->
+            {% if uploadAlert.has_next %}
+              <a href="?{% for key, value in request.GET.items %}{% if key != 'page' %}{{ key }}={{ value }}&{% endif %}{% endfor %}page={{ uploadAlert.next_page_number }}" 
+                 class="pagination-btn pagination-btn-nav" title="Next Page">
+                Next
+                <i class="fas fa-angle-right"></i>
+              </a>
+            {% else %}
+              <span class="pagination-btn pagination-btn-nav pagination-btn-disabled">
+                Next
+                <i class="fas fa-angle-right"></i>
+              </span>
+            {% endif %}
+
+            <!-- Last Page -->
+            {% if uploadAlert.has_next %}
+              <a href="?{% for key, value in request.GET.items %}{% if key != 'page' %}{{ key }}={{ value }}&{% endif %}{% endfor %}page={{ uploadAlert.paginator.num_pages }}" 
+                 class="pagination-btn pagination-btn-nav" title="Last Page">
+                <i class="fas fa-angle-double-right"></i>
+              </a>
+            {% else %}
+              <span class="pagination-btn pagination-btn-nav pagination-btn-disabled">
+                <i class="fas fa-angle-double-right"></i>
+              </span>
+            {% endif %}
+          </div>
+
+          <!-- Page Size Selector -->
+          <div class="page-size-selector">
+            <label for="pageSize" class="page-size-label">Items per page:</label>
+            <select id="pageSize" class="page-size-select" onchange="changePageSize(this.value)">
+              <option value="10" {% if request.GET.per_page == '10' or not request.GET.per_page %}selected{% endif %}>10</option>
+              <option value="25" {% if request.GET.per_page == '25' %}selected{% endif %}>25</option>
+              <option value="50" {% if request.GET.per_page == '50' %}selected{% endif %}>50</option>
+              <option value="100" {% if request.GET.per_page == '100' %}selected{% endif %}>100</option>
+            </select>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+{% include 'detection/footer.html' %}
+  <script>
+    jQuery(document).ready(function($){
+      var date_input = $('.date-picker');
+      var container = $('.search-card').length > 0 ? $('.search-card') : "body";
+      var options = {
+        format: 'yyyy-mm-dd',
+        container: container,
+        todayHighlight: true,
+        autoclose: true,
+      };
+      date_input.datepicker(options);
+    });
+
+    // Function to change page size
+    function changePageSize(newSize) {
+      const url = new URL(window.location.href);
+      url.searchParams.set('per_page', newSize);
+      url.searchParams.set('page', '1'); // Reset to first page
+      
+      // Marcar como navegación interna
+      window.isInternalNavigation = true;
+      window.location.href = url.toString();
+    }
+
+    // Add smooth scroll animations for pagination
+    document.addEventListener('DOMContentLoaded', function() {
+      const paginationLinks = document.querySelectorAll('.pagination-btn:not(.pagination-btn-disabled)');
+      
+      paginationLinks.forEach(link => {
+        if (link.href) {
+          link.addEventListener('click', function(e) {
+            // Marcar como navegación interna
+            window.isInternalNavigation = true;
+            
+            // Add loading state
+            this.style.opacity = '0.7';
+            this.style.pointerEvents = 'none';
+            
+            // Add a small loading spinner
+            const originalContent = this.innerHTML;
+            if (!this.classList.contains('pagination-btn-number')) {
+              this.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            }
+            
+            // Allow the navigation to proceed
+            setTimeout(() => {
+              this.innerHTML = originalContent;
+              this.style.opacity = '1';
+              this.style.pointerEvents = 'auto';
+            }, 100);
+          });
+        }
+      });
+
+      // Variable para controlar navegación interna
+      let isInternalNavigation = false;
+      window.isInternalNavigation = false;
+
+      // Detectar navegación interna
+      const internalLinks = document.querySelectorAll('a[href^="/"], a[href*="alert/"], .view-btn');
+      internalLinks.forEach(link => {
+          link.addEventListener('click', function() {
+              isInternalNavigation = true;
+              window.isInternalNavigation = true;
+              setTimeout(() => {
+                  isInternalNavigation = false;
+                  window.isInternalNavigation = false;
+              }, 100);
+          });
+      });
+
+      // Auto-logout inteligente
+      window.addEventListener('beforeunload', function(e) {
+          if (!isInternalNavigation && !window.isInternalNavigation) {
+              const logoutUrl = "{% url 'logout' %}";
+              const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || 
+                               document.querySelector('meta[name=csrf-token]')?.getAttribute('content');
+              
+              if (navigator.sendBeacon && csrfToken) {
+                  const formData = new FormData();
+                  formData.append('csrfmiddlewaretoken', csrfToken);
+                  navigator.sendBeacon(logoutUrl, formData);
+              }
+          }
+      });
+    });
+  </script>
+</body>
+</html>
 
 {% endblock %}

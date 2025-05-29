@@ -19,9 +19,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 dotenv_file = os.path.join(BASE_DIR, ".env")
 if os.path.isfile(dotenv_file):
-    dotenv.load_dotenv(dotenv_file) 
-
-
+    load_dotenv(dotenv_file)  # ← Cambiar dotenv.load_dotenv por load_dotenv
+else:
+    load_dotenv()
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/3.1/howto/deployment/checklist/
 
@@ -39,7 +39,7 @@ if not SECRET_KEY:
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['weapondetectionsystem.onrender.com']
+ALLOWED_HOSTS = ['weapondetectionsystem.onrender.com', '127.0.0.1', 'localhost']
 
 
 # Application definition

@@ -2,64 +2,804 @@
 
 <!DOCTYPE html>
 <html>
-    
 <head>
-	<title>Alert</title>
-	<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css" integrity="sha384-MCw98/SFnGE8fJT3GXwEOngsV7Zt27NXFoaoApmYm81iuXoPkFOJwJ8ERdknLPMO" crossorigin="anonymous">
-	<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
-	<link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.6.1/css/all.css" integrity="sha384-gfdkjb5BdAXd+lj+gudLWI+BXq4IuLW5IT+brZEZsLFm++aCMlF1V92rMkPaX4PP" crossorigin="anonymous">
-	<link rel="stylesheet" type="text/css" href="{% static '/css/alert.css' %}">
-	<link rel="stylesheet" type="text/css" href="{% static '/css/navbar.css' %}">
-	<link rel="stylesheet" type="text/css" href="{% static '/css/util.css' %}">
+  <meta charset="utf-8">
+  <title>Weapon Detection System - Alert Details</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  
+  <style>
+    * {
+      padding: 0;
+      margin: 0;
+      color: #1a1f36;
+      box-sizing: border-box;
+      word-wrap: break-word;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica Neue, Ubuntu, sans-serif;
+    }
 
+    body {
+        min-height: 100vh;
+        background-color: #0f172a;
+        color: #fff;
+        display: flex;
+        flex-direction: column;
+    }
 
+    .alert-root {
+        background: #0f172a;
+        min-height: 100vh;
+        position: relative;
+    }
+
+    .alert-background {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        top: 0;
+        z-index: 0;
+        overflow: hidden;
+    }
+
+    .alert-background-grid {
+        display: grid;
+        grid-template-columns: [start] 1fr [left-gutter] repeat(16,86.6px) [left-gutter] 1fr [end];
+        grid-template-rows: [top] 1fr [top-gutter] repeat(8,64px) [bottom-gutter] 1fr [bottom];
+        justify-content: center;
+        margin: 0 -2%;
+        transform: rotate(-12deg) skew(-12deg);
+    }
+
+    .bg-element {
+        box-sizing: border-box;
+    }
+
+    .bg-blue {
+        background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+    }
+
+    .bg-dark {
+        background: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%);
+    }
+
+    .bg-gray {
+        background-color: #374151;
+    }
+
+    .bg-cyan {
+        background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+    }
+
+    .bg-border {
+        box-shadow: inset 0 0 0 2px #334155;
+    }
+
+    .animate-left {
+        animation: slideLeft 3s ease-in-out infinite;
+    }
+
+    .animate-right {
+        animation: slideRight 4s ease-in-out infinite;
+    }
+
+    @keyframes slideLeft {
+      0%, 100% { transform: translateX(0px); }
+      50% { transform: translateX(1000px); }
+    }
+
+    @keyframes slideRight {
+      0%, 100% { transform: translateX(0px); }
+      50% { transform: translateX(-1000px); }
+    }
+
+    .alert-container {
+        position: relative;
+        z-index: 1;
+        padding: 2rem;
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+
+    .back-btn {
+        background: rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.8);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        padding: 0.75rem 1.5rem;
+        border-radius: 12px;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        margin-bottom: 2rem;
+    }
+
+    .back-btn:hover {
+        background: rgba(255, 255, 255, 0.15);
+        color: white;
+        text-decoration: none;
+        transform: translateX(-5px);
+    }
+
+    .alert-header {
+        text-align: center;
+        margin-bottom: 3rem;
+    }
+
+    .alert-title {
+        color: white;
+        font-size: 2.5rem;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .alert-title i {
+        color: #ef4444;
+        font-size: 2.8rem;
+    }
+
+    .alert-status {
+        background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+        color: white;
+        padding: 0.75rem 2rem;
+        border-radius: 25px;
+        font-weight: 600;
+        font-size: 1rem;
+        display: inline-block;
+        box-shadow: 0 8px 25px rgba(239, 68, 68, 0.4);
+    }
+
+    .content-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 3rem;
+        margin-bottom: 2rem;
+    }
+
+    .image-card {
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(20px);
+        border-radius: 20px;
+        padding: 2.5rem;
+        box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .image-header {
+        color: #1a1f36;
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin-bottom: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .image-header i {
+        color: #ef4444;
+    }
+
+    .detection-image-large {
+        width: 100%;
+        max-width: 400px;
+        border-radius: 16px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+        margin-bottom: 1rem;
+        transition: transform 0.3s ease;
+    }
+
+    .detection-image-large:hover {
+        transform: scale(1.02);
+    }
+
+    .image-caption {
+        color: #64748b;
+        font-size: 0.9rem;
+        text-align: center;
+        font-style: italic;
+    }
+
+    .info-card {
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(20px);
+        border-radius: 20px;
+        padding: 2.5rem;
+        box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
+    }
+
+    .info-header {
+        color: #1a1f36;
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin-bottom: 2rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .info-header i {
+        color: #3b82f6;
+    }
+
+    .info-table {
+        width: 100%;
+        border-collapse: collapse;
+        border-spacing: 0;
+    }
+
+    .info-table tr:not(:last-child) {
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .info-table td {
+        padding: 1.5rem 0;
+        vertical-align: top;
+    }
+
+    .info-label {
+        color: #64748b;
+        font-size: 0.875rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        width: 40%;
+        padding-right: 1rem;
+    }
+
+    .info-value {
+        color: #1a1f36;
+        font-size: 1.1rem;
+        font-weight: 600;
+    }
+
+    .time-value {
+        font-family: 'JetBrains Mono', monospace;
+        color: #3b82f6;
+    }
+
+    .location-value {
+        color: #059669;
+    }
+
+    .receiver-value {
+        color: #7c3aed;
+    }
+
+    .actions-section {
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(20px);
+        border-radius: 20px;
+        padding: 2.5rem;
+        box-shadow: 0 25px 50px rgba(0, 0, 0, 0.25);
+        text-align: center;
+    }
+
+    .actions-title {
+        color: #1a1f36;
+        font-size: 1.25rem;
+        font-weight: 600;
+        margin-bottom: 1.5rem;
+    }
+
+    .action-btn {
+        background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+        color: white;
+        font-weight: 600;
+        cursor: pointer;
+        border: none;
+        border-radius: 12px;
+        padding: 1rem 2rem;
+        transition: all 0.3s ease;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin: 0 0.5rem;
+        font-size: 0.95rem;
+    }
+
+    .action-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px rgba(59, 130, 246, 0.3);
+        color: white;
+        text-decoration: none;
+    }
+
+    .action-btn.secondary {
+        background: linear-gradient(135deg, #64748b 0%, #475569 100%);
+    }
+
+    .action-btn.secondary:hover {
+        box-shadow: 0 10px 25px rgba(100, 116, 139, 0.3);
+    }
+
+    .action-btn.danger {
+        background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    }
+
+    .action-btn.danger:hover {
+        box-shadow: 0 10px 25px rgba(239, 68, 68, 0.3);
+    }
+
+    .action-btn:disabled {
+        background: #94a3b8;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+    }
+
+    .action-btn:disabled:hover {
+        transform: none;
+        box-shadow: none;
+    }
+
+    /* Status Message */
+    .status-message {
+        margin-top: 1.5rem;
+        padding: 1rem;
+        border-radius: 12px;
+        background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        color: white;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-weight: 500;
+        transition: all 0.3s ease;
+    }
+
+    .status-message.error {
+        background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    }
+
+    .status-message.warning {
+        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+        .alert-container {
+            padding: 1rem;
+        }
+        
+        .content-grid {
+            grid-template-columns: 1fr;
+            gap: 2rem;
+        }
+        
+        .image-card, .info-card {
+            padding: 2rem;
+        }
+        
+        .alert-title {
+            font-size: 2rem;
+        }
+        
+        .action-btn {
+            margin: 0.5rem 0;
+            width: 100%;
+            justify-content: center;
+        }
+
+        .info-table td {
+            padding: 1rem 0;
+        }
+
+        .info-label {
+            width: 35%;
+            font-size: 0.8rem;
+        }
+
+        .info-value {
+            font-size: 1rem;
+        }
+    }
+
+    @media (max-width: 480px) {
+        .alert-title {
+            font-size: 1.5rem;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .actions-section {
+            padding: 2rem;
+        }
+
+        .detection-image-large {
+            max-width: 300px;
+        }
+    }
+  </style>
 </head>
+
 <body>
+  <!-- Incluir el navbar moderno -->
+  {% include 'detection/navbar.html' %}
 
-	<nav class="navbar navbar-dark bg-dark justify-content-between">
-		<a class="navbar-brand" href="{% url 'home' %}" style="margin-left: 45px;">Weapon Detection System</a>	  
-	</nav>
-	
-<div class="limiter">
-<div class="container-login100 p-t-15">
-<div class="wrap-login100 p-l-40 p-r-40 p-t-25 p-b-15">
+  <div class="alert-root">
+    <!-- Animated Background -->
+    <div class="alert-background">
+      <div class="alert-background-grid">
+        <div class="bg-element" style="grid-area: top / start / 8 / end;">
+          <div style="background: linear-gradient(rgba(15, 23, 42, 0.8) 0%, rgba(30, 41, 59, 0.9) 33%); height: 100%;"></div>
+        </div>
+        <div class="bg-element bg-border animate-left" style="grid-area: 4 / 2 / auto / 5;"></div>
+        <div class="bg-element bg-dark" style="grid-area: 6 / start / auto / 2;"></div>
+        <div class="bg-element bg-blue animate-left" style="grid-area: 7 / start / auto / 4;"></div>
+        <div class="bg-element bg-gray animate-left" style="grid-area: 8 / 4 / auto / 6;"></div>
+        <div class="bg-element bg-cyan animate-right" style="grid-area: 2 / 15 / auto / end;"></div>
+        <div class="bg-element bg-blue animate-right" style="grid-area: 3 / 14 / auto / end;"></div>
+        <div class="bg-element bg-gray animate-right" style="grid-area: 4 / 17 / auto / 20;"></div>
+        <div class="bg-element bg-border animate-right" style="grid-area: 5 / 14 / auto / 17;"></div>
+      </div>
+    </div>
 
-	<table class="table">
-		<tr>
-			<th scope="col" class="top-row">Detection</th>
-		</tr>
+    <!-- Alert Content -->
+    <div class="alert-container">
+      <!-- Back Button -->
+      <a href="{% url 'home' %}" class="back-btn">
+        <i class="fas fa-arrow-left"></i>
+        Back to Dashboard
+      </a>
 
-		{% for alert in uploadAlert %}
+      <!-- Alert Header -->
+      <div class="alert-header">
+        <h1 class="alert-title">
+          <i class="fas fa-exclamation-triangle"></i>
+          Weapon Detection Alert
+        </h1>
+        <span class="alert-status">
+          <i class="fas fa-shield-alt"></i>
+          ACTIVE THREAT DETECTED
+        </span>
+      </div>
 
-		<tr>
-			<td class="w-25"><img class="img-fluid" src='https://weapondetectionsystem.s3.us-east-1.amazonaws.com/media/{{alert.image}}'/></td>
-		</tr>
-		{% endfor %}
-	</table>
+      <!-- Content Grid -->
+      <div class="content-grid">
+        <!-- Image Section -->
+        <div class="image-card">
+          <h2 class="image-header">
+            <i class="fas fa-camera"></i>
+            Detection Evidence
+          </h2>
+          {% for alert in uploadAlert %}
+          <img class="detection-image-large" 
+               src='https://weapondetectionsystem.s3.us-east-1.amazonaws.com/media/{{alert.image}}' 
+               alt="Weapon Detection Evidence"/>
+          <p class="image-caption">Weapon detected in security footage - {{ alert.dateCreated|date:"F j, Y at g:i A" }}</p>
+          {% endfor %}
+        </div>
 
-			<table class="table">
-				<tr>
-					<th scope="col" class="top-row">Location</th>
-					<th scope="col" class="top-row">Alert was sent to</th>
-					<th scope="col" class="top-row">Time</th>
-				</tr>
+        <!-- Info Section -->
+        <div class="info-card">
+          <h2 class="info-header">
+            <i class="fas fa-info-circle"></i>
+            Alert Details
+          </h2>
+          
+          <table class="info-table">
+            {% for alert in uploadAlert %}
+            <tr>
+              <td class="info-label">Location</td>
+              <td class="info-value location-value">
+                <i class="fas fa-map-marker-alt"></i>
+                {{ alert.location }}
+              </td>
+            </tr>
+            <tr>
+              <td class="info-label">Alert Sent To</td>
+              <td class="info-value receiver-value">
+                <i class="fas fa-user-shield"></i>
+                {{ alert.alertReceiver }}
+              </td>
+            </tr>
+            <tr>
+              <td class="info-label">Detection Time</td>
+              <td class="info-value time-value">
+                <i class="fas fa-clock"></i>
+                {{ alert.dateCreated|date:"Y-m-d H:i:s" }}
+              </td>
+            </tr>
+            <tr>
+              <td class="info-label">Alert Status</td>
+              <td class="info-value">
+                <i class="fas fa-exclamation-circle" style="color: #ef4444;"></i>
+                <span id="alertStatus">Active Monitoring</span>
+              </td>
+            </tr>
+            {% endfor %}
+          </table>
+        </div>
+      </div>
 
-				{% for alert in uploadAlert %}
+      <!-- Actions Section -->
+      <div class="actions-section">
+        <h3 class="actions-title">Available Actions</h3>
+        <div class="actions-buttons">
+          <button onclick="downloadReport()" class="action-btn">
+            <i class="fas fa-download"></i>
+            Download Report
+          </button>
+          <button onclick="archiveAlert()" class="action-btn danger" id="archiveBtn">
+            <i class="fas fa-archive"></i>
+            Archive Alert
+          </button>
+        </div>
+        
+        <!-- Status Messages -->
+        <div id="statusMessage" class="status-message" style="display: none;">
+          <i class="fas fa-check-circle"></i>
+          <span id="statusText"></span>
+        </div>
+      </div>
+    </div>
+  </div>
 
-				<tr>
-					<td>{{alert.location}}</td>
-					<td>{{alert.alertReceiver}}</td>
-					<td>{{alert.dateCreated|date:"Y-m-d H:i:s"}}</td>
-					
-				</tr>
-				{% endfor %}
+  <!-- Incluir el footer -->
+  {% include 'detection/footer.html' %}
 
-			</table>
-		
-</div>
-</div>
-</div>
+  <!-- Auto-logout Script Corregido -->
+  <script>
+    // Variable para controlar si es navegación interna
+    let isInternalNavigation = false;
 
+    // Marcar navegación interna cuando se hace clic en enlaces internos
+    document.addEventListener('DOMContentLoaded', function() {
+        // Obtener todos los enlaces internos
+        const internalLinks = document.querySelectorAll('a[href^="/"], a[href^="{% url "]');
+        
+        internalLinks.forEach(link => {
+            link.addEventListener('click', function() {
+                isInternalNavigation = true;
+                // Resetear después de un pequeño delay
+                setTimeout(() => {
+                    isInternalNavigation = false;
+                }, 100);
+            });
+        });
+
+        // También marcar para el botón de volver específicamente
+        const backButton = document.querySelector('.back-btn');
+        if (backButton) {
+            backButton.addEventListener('click', function() {
+                isInternalNavigation = true;
+            });
+        }
+    });
+
+    // Auto-logout solo cuando realmente se cierra la pestaña/navegador
+    window.addEventListener('beforeunload', function(e) {
+        // Solo hacer logout si NO es navegación interna
+        if (!isInternalNavigation) {
+            const logoutUrl = "{% url 'logout' %}";
+            const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || 
+                             document.querySelector('meta[name=csrf-token]')?.getAttribute('content');
+            
+            if (navigator.sendBeacon && csrfToken) {
+                const formData = new FormData();
+                formData.append('csrfmiddlewaretoken', csrfToken);
+                navigator.sendBeacon(logoutUrl, formData);
+            }
+        }
+    });
+
+    // Evento alternativo más confiable para detectar cierre real
+    window.addEventListener('pagehide', function(e) {
+        // Solo si la página se está descargando completamente (no navegación)
+        if (e.persisted === false && !isInternalNavigation) {
+            const logoutUrl = "{% url 'logout' %}";
+            const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || 
+                             document.querySelector('meta[name=csrf-token]')?.getAttribute('content');
+            
+            if (navigator.sendBeacon && csrfToken) {
+                const formData = new FormData();
+                formData.append('csrfmiddlewaretoken', csrfToken);
+                navigator.sendBeacon(logoutUrl, formData);
+            }
+        }
+    });
+
+    // Detectar cuando realmente se cierra la pestaña vs navegación
+    window.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'hidden' && !isInternalNavigation) {
+            // Esperar un momento para ver si es navegación o cierre real
+            setTimeout(() => {
+                if (document.visibilityState === 'hidden' && !isInternalNavigation) {
+                    // Probablemente es cierre de pestaña, hacer logout
+                    const logoutUrl = "{% url 'logout' %}";
+                    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || 
+                                     document.querySelector('meta[name=csrf-token]')?.getAttribute('content');
+                    
+                    if (navigator.sendBeacon && csrfToken) {
+                        const formData = new FormData();
+                        formData.append('csrfmiddlewaretoken', csrfToken);
+                        navigator.sendBeacon(logoutUrl, formData);
+                    }
+                }
+            }, 5000); // 5 segundos de gracia
+        }
+    });
+
+    // Función para descargar reporte
+    function downloadReport() {
+        // Recopilar datos de la alerta
+        const alertData = {
+            {% for alert in uploadAlert %}
+            location: "{{ alert.location }}",
+            alertReceiver: "{{ alert.alertReceiver }}",
+            dateCreated: "{{ alert.dateCreated|date:'Y-m-d H:i:s' }}",
+            imageUrl: "https://weapondetectionsystem.s3.us-east-1.amazonaws.com/media/{{ alert.image }}",
+            alertId: "{{ alert.id }}",
+            {% endfor %}
+            reportGenerated: new Date().toLocaleString(),
+            status: document.getElementById('alertStatus').textContent
+        };
+
+        // Crear contenido del reporte
+        const reportContent = `
+WEAPON DETECTION SYSTEM - SECURITY REPORT
+==========================================
+
+ALERT DETAILS:
+--------------
+Alert ID: ${alertData.alertId || 'N/A'}
+Detection Time: ${alertData.dateCreated}
+Location: ${alertData.location}
+Alert Sent To: ${alertData.alertReceiver}
+Current Status: ${alertData.status}
+
+INCIDENT SUMMARY:
+-----------------
+A potential weapon has been detected through the automated security system.
+Immediate response and investigation are recommended.
+
+IMAGE EVIDENCE:
+---------------
+Evidence Image: ${alertData.imageUrl}
+
+SYSTEM INFORMATION:
+-------------------
+Report Generated: ${alertData.reportGenerated}
+System: Weapon Detection System v2.0
+
+RECOMMENDED ACTIONS:
+--------------------
+1. Verify the detection with security personnel
+2. Investigate the reported location immediately
+3. Contact relevant authorities if threat is confirmed
+4. Review security protocols and response procedures
+
+==========================================
+This report is confidential and should only be shared with authorized personnel.
+        `;
+
+        // Crear y descargar archivo
+        const blob = new Blob([reportContent], { type: 'text/plain' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `weapon_detection_report_${alertData.alertId || 'alert'}_${new Date().toISOString().slice(0,10)}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+
+        // Mostrar mensaje de éxito
+        showStatusMessage('Report downloaded successfully!', 'success');
+    }
+
+    // Función para archivar alerta
+    function archiveAlert() {
+        // Confirmar acción
+        if (!confirm('Are you sure you want to archive this alert? This action cannot be undone.')) {
+            return;
+        }
+
+        // Desactivar botón mientras procesa
+        const archiveBtn = document.getElementById('archiveBtn');
+        const originalText = archiveBtn.innerHTML;
+        archiveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Archiving...';
+        archiveBtn.disabled = true;
+
+        // Simular llamada al servidor (reemplazar con tu lógica real)
+        setTimeout(() => {
+            // Aquí harías la llamada AJAX real a tu backend
+            /*
+            fetch('/archive-alert/', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    alert_id: '{{ uploadAlert.0.id }}' // Primer alert del loop
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Actualizar UI
+                    document.getElementById('alertStatus').textContent = 'Archived';
+                    document.getElementById('alertStatus').style.color = '#64748b';
+                    archiveBtn.innerHTML = '<i class="fas fa-check"></i> Archived';
+                    archiveBtn.style.background = '#64748b';
+                    showStatusMessage('Alert archived successfully!', 'success');
+                } else {
+                    showStatusMessage('Error archiving alert. Please try again.', 'error');
+                    archiveBtn.innerHTML = originalText;
+                    archiveBtn.disabled = false;
+                }
+            })
+            .catch(error => {
+                showStatusMessage('Error archiving alert. Please try again.', 'error');
+                archiveBtn.innerHTML = originalText;
+                archiveBtn.disabled = false;
+            });
+            */
+
+            // Por ahora, simular éxito
+            document.getElementById('alertStatus').textContent = 'Archived';
+            document.getElementById('alertStatus').style.color = '#64748b';
+            const statusIcon = document.getElementById('alertStatus').previousElementSibling;
+            statusIcon.className = 'fas fa-archive';
+            statusIcon.style.color = '#64748b';
+            
+            archiveBtn.innerHTML = '<i class="fas fa-check"></i> Archived';
+            archiveBtn.style.background = '#64748b';
+            archiveBtn.disabled = true;
+            
+            showStatusMessage('Alert archived successfully!', 'success');
+        }, 2000); // Simular delay de red
+    }
+
+    // Función para mostrar mensajes de estado
+    function showStatusMessage(message, type = 'success') {
+        const statusMessage = document.getElementById('statusMessage');
+        const statusText = document.getElementById('statusText');
+        
+        statusText.textContent = message;
+        statusMessage.className = 'status-message';
+        
+        if (type === 'error') {
+            statusMessage.classList.add('error');
+        } else if (type === 'warning') {
+            statusMessage.classList.add('warning');
+        }
+        
+        statusMessage.style.display = 'flex';
+        
+        // Ocultar después de 5 segundos
+        setTimeout(() => {
+            statusMessage.style.display = 'none';
+        }, 5000);
+    }
+    document.addEventListener('DOMContentLoaded', function() {
+        const image = document.querySelector('.detection-image-large');
+        if (image) {
+            image.addEventListener('click', function() {
+                if (this.style.transform === 'scale(1.5)') {
+                    this.style.transform = 'scale(1)';
+                    this.style.cursor = 'zoom-in';
+                } else {
+                    this.style.transform = 'scale(1.5)';
+                    this.style.cursor = 'zoom-out';
+                }
+            });
+            image.style.cursor = 'zoom-in';
+        }
+    });
+  </script>
+
+  <!-- CSRF Token para formularios -->
+  {% csrf_token %}
 </body>
-
 </html>
