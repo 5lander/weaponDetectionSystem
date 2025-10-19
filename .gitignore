@@ -5,8 +5,15 @@ __pycache__/
 
 # C extensions
 *.so
+
+# Archivos de entorno y sistema
 .env
 .DS_Store
+.env.local
+.env.development
+.env.test
+.env.production
+
 # Distribution / packaging
 .Python
 env/
@@ -27,6 +34,21 @@ share/python-wheels/
 .installed.cfg
 *.egg
 
+# Archivos grandes a ignorar específicamente
+Cliente/dist.rar
+Cliente/model/last.pt
+*.pt
+*.pth
+*.h5
+*.tar.gz
+*.zip
+*.rar
+
+# Machine Learning specific
+*.model
+*.pkl
+*.joblib
+
 # Django stuff:
 *.log
 *.pot
@@ -35,24 +57,27 @@ __pycache__/
 local_settings.py
 db.sqlite3
 
-# Media
+# Media y archivos estáticos
 /media
-
-# Static files
 /static
 
 # Jupyter Notebook
 .ipynb_checkpoints
 
-# Environments
-.env
+# Entornos virtuales
 .venv
+venv/
 ENV/
 env.bak/
 venv.bak/
 
-# Pytest
+# Testing
+.pytest_cache/
 .cache
+*.cover
+.coverage
+htmlcov/
 
-# VS Code
+# IDEs y editores
 .vscode/
+.idea/

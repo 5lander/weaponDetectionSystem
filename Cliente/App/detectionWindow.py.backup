@@ -1,10 +1,8 @@
-# detectionWindow.py - VERSIÓN CORREGIDA CON CODIFICACIÓN UTF-8
-
 from PyQt5.QtWidgets import QMainWindow, QLabel, QFrame, QProgressBar
 from PyQt5.QtCore import pyqtSignal, pyqtSlot, Qt, QTimer, QPropertyAnimation, QEasingCurve
 from PyQt5.QtGui import QImage, QPixmap, QFont, QPalette, QColor
 from PyQt5.uic import loadUi
-from App.detection import Detection
+from App.detection import Detection  # Importar la versión ultra optimizada
 import os
 import sys
 import logging
@@ -20,7 +18,7 @@ class DetectionWindow(QMainWindow):
         self.token = token
         self.location = location
         self.receiver = receiver
-        self.model_path = self.resource_path("model/last.pt")
+        self.model_path = self.resource_path("model/predict.pt")
         self.detection = None
         
         # Configuraciones de rendimiento
@@ -42,13 +40,13 @@ class DetectionWindow(QMainWindow):
         
         # Iniciar detección
         self.createDetectionInstance()
-        logging.info("DetectionWindow  inicializada")
+        logging.info("DetectionWindow ultra optimizada inicializada")
 
     def setup_optimized_ui(self):
         """Configurar interfaz optimizada para mejor rendimiento"""
         # Configurar ventana principal
         self.setFixedSize(1000, 600)
-        self.setWindowTitle("🔍 Weapon Detection System - Monitoring ")
+        self.setWindowTitle("🔍 Weapon Detection System - Monitoring (Ultra Optimized)")
         
         # Optimizar el label de la cámara
         self.CameraLabel.setGeometry(50, 50, 640, 480)
@@ -64,8 +62,7 @@ class DetectionWindow(QMainWindow):
             }
         """)
         self.CameraLabel.setAlignment(Qt.AlignCenter)
-        # CORREGIR TEXTO - usar texto simple sin emojis problemáticos
-        self.CameraLabel.setText("CAMARA INICIANDO...\nEspere mientras el sistema optimizado arranca")
+        self.CameraLabel.setText("🎥 Initializing Ultra-Fast Camera...\nPlease wait while the optimized system starts")
         
         # Optimizar botón de parada
         self.stopButton.setGeometry(320, 545, 200, 45)
@@ -131,8 +128,7 @@ class DetectionWindow(QMainWindow):
                 font-family: 'Segoe UI', Arial, sans-serif;
             }
         """)
-        # CORREGIR TEXTO - sin emojis problemáticos
-        self.statusNotificationLabel.setText("SISTEMA OPTIMIZADO ACTIVO\nAnalisis cada 3 segundos")
+        self.statusNotificationLabel.setText("🟢 Sistema Optimizado Activo\n📊 Análisis cada 3 segundos")
         self.statusNotificationLabel.show()
         
         # Timer para ocultar notificación de arma
@@ -158,7 +154,7 @@ class DetectionWindow(QMainWindow):
         """)
         
         # Analysis Status
-        self.analysisLabel = QLabel("Analisis: Listo", self)
+        self.analysisLabel = QLabel("Análisis: Listo", self)
         self.analysisLabel.setGeometry(850, 300, 130, 30)
         self.analysisLabel.setStyleSheet("""
             QLabel {
@@ -218,7 +214,7 @@ class DetectionWindow(QMainWindow):
         self.fps_timer.start(1000)  # Actualizar cada segundo
 
     def createDetectionInstance(self):
-        """Crear instancia de detección """
+        """Crear instancia de detección ultra optimizada"""
         if self.detection is None:
             self.detection = Detection(self.model_path, self.token, self.location, self.receiver)
             
@@ -235,7 +231,7 @@ class DetectionWindow(QMainWindow):
             
             # Iniciar detección
             self.detection.start()
-            logging.info("Instancia de Detection creada y iniciada")
+            logging.info("Instancia de Detection ultra optimizada creada y iniciada")
 
     @pyqtSlot(QImage)
     def setImage(self, image):
@@ -288,10 +284,10 @@ class DetectionWindow(QMainWindow):
         """Mostrar notificación de arma detectada mejorada"""
         # Incrementar contador
         self.detection_count += 1
-        self.detectionCountLabel.setText(f"Detecciones: {self.detection_count}")
+        self.detectionCountLabel.setText(f"🔍 Detecciones: {self.detection_count}")
         
         # Actualizar estado de análisis
-        self.analysisLabel.setText("Analisis: ARMA!")
+        self.analysisLabel.setText("Análisis: ¡ARMA!")
         self.analysisLabel.setStyleSheet("""
             QLabel {
                 background-color: rgba(239, 68, 68, 200);
@@ -306,9 +302,7 @@ class DetectionWindow(QMainWindow):
         """)
         
         # Mostrar notificación principal con animación
-        # CORREGIR TEXTO - sin emojis problemáticos
-        current_time = self.get_current_time()
-        self.weaponNotificationLabel.setText(f"ALERTA DE SEGURIDAD\n\n{message}\n\n{current_time}")
+        self.weaponNotificationLabel.setText(f"🚨 ALERTA DE SEGURIDAD\n\n{message}\n\n⏰ {self.get_current_time()}")
         
         # Efecto de aparición con animación
         self.weaponNotificationLabel.show()
@@ -350,7 +344,7 @@ class DetectionWindow(QMainWindow):
 
     def restore_analysis_status(self):
         """Restaurar estado normal de análisis"""
-        self.analysisLabel.setText("Analisis: Activo")
+        self.analysisLabel.setText("Análisis: Activo")
         self.analysisLabel.setStyleSheet("""
             QLabel {
                 background-color: rgba(30, 41, 59, 180);
@@ -390,7 +384,7 @@ class DetectionWindow(QMainWindow):
         logging.error(f"Error en la detección: {error_message}")
         
         # Mostrar error en el label de análisis
-        self.analysisLabel.setText("Analisis: ERROR")
+        self.analysisLabel.setText("Análisis: ERROR")
         self.analysisLabel.setStyleSheet("""
             QLabel {
                 background-color: rgba(239, 68, 68, 200);
@@ -425,7 +419,7 @@ class DetectionWindow(QMainWindow):
         if hasattr(self.detection, 'analysis_running'):
             if self.detection.analysis_running:
                 self.detection.analysis_running = False
-                self.statusNotificationLabel.setText("SISTEMA PAUSADO\nPresiona ESPACIO para reanudar")
+                self.statusNotificationLabel.setText("⏸️ Sistema Pausado\n🔄 Presiona ESPACIO para reanudar")
                 self.statusNotificationLabel.setStyleSheet("""
                     QLabel {
                         background: qlineargradient(x1:0, y1:0, x2:1, y2:1, 
@@ -442,7 +436,7 @@ class DetectionWindow(QMainWindow):
                 """)
             else:
                 self.detection.analysis_running = True
-                self.statusNotificationLabel.setText("SISTEMA OPTIMIZADO ACTIVO\nAnalisis cada 3 segundos")
+                self.statusNotificationLabel.setText("🟢 Sistema Optimizado Activo\n📊 Análisis cada 3 segundos")
                 self.statusNotificationLabel.setStyleSheet("""
                     QLabel {
                         background: qlineargradient(x1:0, y1:0, x2:1, y2:1, 
@@ -460,7 +454,7 @@ class DetectionWindow(QMainWindow):
 
     def closeEvent(self, event):
         """Evento de cierre de ventana optimizado"""
-        logging.info("Cerrando DetectionWindow ")
+        logging.info("Cerrando DetectionWindow ultra optimizada")
         
         # Detener timers
         if hasattr(self, 'fps_timer'):
@@ -477,7 +471,7 @@ class DetectionWindow(QMainWindow):
         """Cerrar detección y limpiar recursos optimizado"""
         if self.detection:
             # Mostrar mensaje de cierre
-            self.statusNotificationLabel.setText("CERRANDO SISTEMA...\nLiberando recursos")
+            self.statusNotificationLabel.setText("🔴 Cerrando Sistema...\n⏳ Liberando recursos")
             self.statusNotificationLabel.setStyleSheet("""
                 QLabel {
                     background: qlineargradient(x1:0, y1:0, x2:1, y2:1, 

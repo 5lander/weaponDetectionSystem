@@ -60,7 +60,7 @@ class LoginWindow(QMainWindow):
         self.loginButton.clicked.connect(self.login)
         self.setWindowTitle("Login - Weapon Detection")
         
-        # logging.info("Ventana de login inicializada")  # DISABLED - Only errors logged
+        logging.info("Ventana de login inicializada")
 
     def setup_resource_path(self):
         """Configura el método resource_path"""
@@ -256,11 +256,11 @@ class LoginWindow(QMainWindow):
         self.start_login_animation()
 
         try:
-            url = 'https://weaponnotificationserver.onrender.com/api/get_auth_token/'
+            url = 'http://127.0.0.1:8000/api/get_auth_token/'
             response = requests.post(url, data={'username': username, 'password': password}, timeout=10)
             
-            # logging.debug(f"Código de estado de la respuesta: {response.status_code}")  # DISABLED - Only errors logged
-            # logging.debug(f"Contenido de la respuesta: {response.text}")  # DISABLED - Only errors logged
+            logging.debug(f"Código de estado de la respuesta: {response.status_code}")
+            logging.debug(f"Contenido de la respuesta: {response.text}")
 
             if response.ok:
                 try:
@@ -269,7 +269,7 @@ class LoginWindow(QMainWindow):
                         self.login_success_animation()
                         self.loginSuccessful.emit(json_response['token'])
                         self.close()
-                        # logging.info("Inicio de sesión exitoso. Token recibido.")  # DISABLED - Only errors logged
+                        logging.info("Inicio de sesión exitoso. Token recibido.")
                     else:
                         self.stop_login_animation()
                         self.showErrorMessage("Error de inicio de sesión", "La respuesta del servidor no contiene un token.")
@@ -376,11 +376,11 @@ class LoginWindow(QMainWindow):
         error_box.setStyleSheet(style)
         
         error_box.exec_()
-        # logging.warning(f"Error mostrado al usuario: {title} - {message}")  # DISABLED - Only errors logged
+        logging.warning(f"Error mostrado al usuario: {title} - {message}")
 
     def goToRegisterPage(self):
         try:
-            webbrowser.open('https://weapondetectionsystem.onrender.com/register/')
+            webbrowser.open('http://127.0.0.1:8000/register/')
             print("Página de registro abierta en el navegador.")
         except Exception as e:
             error_message = f"No se pudo abrir la página de registro: {str(e)}"
@@ -388,5 +388,5 @@ class LoginWindow(QMainWindow):
             logging.error(error_message)
 
     def closeEvent(self, event):
-        # logging.info("Ventana de login cerrada")  # DISABLED - Only errors logged
+        logging.info("Ventana de login cerrada")
         super().closeEvent(event)

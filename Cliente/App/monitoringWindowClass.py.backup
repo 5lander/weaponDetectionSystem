@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # monitoringWindowClass.py - VERSIÓN CORREGIDA CON VALIDACIÓN DE EMAIL
 
 from PyQt5.QtWidgets import QMainWindow, QMessageBox, QLabel, QProgressBar, QFrame, QWidget, QLineEdit, QPushButton
@@ -114,10 +113,10 @@ class MonitoringWindow(QMainWindow):
         self.receiveInput.setGeometry(40, 290, 340, 45)    # Altura aumentada de 50 a 45
         self.receiveInput.setPlaceholderText("Ej: correo@empresa.com o +593987654321")
         
-        self.startMonitoring = QPushButton("Iniciar Monitoreo", central_widget)
+        self.startMonitoring = QPushButton("▶ Iniciar Monitoreo", central_widget)
         self.startMonitoring.setGeometry(40, 355, 150, 55)  # Y ajustado
         
-        self.logoutButton = QPushButton("Cerrar Sesión", central_widget)
+        self.logoutButton = QPushButton("✕ Cerrar Sesión", central_widget)
         self.logoutButton.setGeometry(210, 355, 150, 55)   # Y ajustado
         
         # Configurar fuentes
@@ -311,7 +310,7 @@ class MonitoringWindow(QMainWindow):
     def start_monitoring_animation(self):
         """Inicia animación de monitoreo"""
         # Cambiar botón a modo detener
-        self.startMonitoring.setText("Detener Monitoreo")
+        self.startMonitoring.setText("⏹️ Detener Monitoreo")
         self.startMonitoring.setStyleSheet(MonitoringWindowStyles.MONITORING_BUTTON_ACTIVE)
         
         # Mostrar y animar barra de progreso
@@ -342,7 +341,7 @@ class MonitoringWindow(QMainWindow):
             self.monitoring_timer.stop()
             
         # Restaurar botón
-        self.startMonitoring.setText("Iniciar Monitoreo")
+        self.startMonitoring.setText("▶ Iniciar Monitoreo")
         self.startMonitoring.setStyleSheet(MonitoringWindowStyles.MONITORING_BUTTON)
         
         # Ocultar barra de progreso

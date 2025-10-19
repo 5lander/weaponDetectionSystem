@@ -1,459 +1,346 @@
+# -*- coding: utf-8 -*-
 import os
 import sys
-from PyQt5.QtCore import QThread, pyqtSignal, Qt, QMutex, QMutexLocker
+import threading
+import time
+from queue import Queue
+from PyQt5.QtCore import QThread, pyqtSignal, Qt, QTimer
 from PyQt5.QtGui import QImage
 import cv2
-import time
 from ultralytics import YOLO
 import numpy as np
 import psutil
 import GPUtil
 import requests
 import logging
-import gc
-from threading import Event
 
 class Detection(QThread):
     changePixmap = pyqtSignal(QImage)
     resourceUpdate = pyqtSignal(dict)
     error = pyqtSignal(str)
-
+    weaponDetected = pyqtSignal(str)
+    
     def __init__(self, model_path, token, location, receiver):
         super(Detection, self).__init__()
-        
-        # Parámetros principales
         self.model_path = model_path
+        self.colors = {0: (0, 0, 255), 1: (0, 165, 255)}
+        self.last_resource_check = 0
+        self.resource_check_interval = 5
         self.token = token
         self.location = location
         self.receiver = receiver
         
-        # Configuración de detección
-        self.colors = {0: (0, 0, 255), 1: (0, 165, 255)}
-        self.frame_skip = 3
-        self.frame_count = 0
-        
-        # Control de tiempo
-        self.last_resource_check = 0
-        self.resource_check_interval = 5
+        # Configuración optimizada MANTENIENDO el análisis original
+        self.analysis_interval = 3  # Analizar cada 3 segundos
+        self.last_analysis_time = 0
+        self.capture_interval = 5  # Enviar detecciones cada 5 segundos
         self.last_capture_time = 0
-        self.capture_interval = 5
         
-        # Variables de control thread-safe
-        self.running = False
-        self._stop_event = Event()
-        self._mutex = QMutex()
-        
-        # Recursos
         self.model = None
+        self.running = False
         self.cap = None
         
-        # Control de errores
-        self._max_consecutive_errors = 5
-        self._consecutive_errors = 0
+        # Cola para frames a analizar
+        self.analysis_queue = Queue(maxsize=2)
+        self.analysis_thread = None
+        self.analysis_running = False
         
-        logging.info("Instancia de Detection inicializada de forma segura")
+        logging.info("Instancia de Detection con análisis original inicializada")
 
     def run(self):
-        """Método principal del hilo con manejo robusto de errores"""
-        try:
-            self._initialize_detection()
-            if not self.running:
-                return
-                
-            self._main_detection_loop()
-            
-        except Exception as e:
-            error_msg = f"Error crítico en el hilo de detección: {str(e)}"
-            self.error.emit(error_msg)
-            logging.error(error_msg)
-        finally:
-            self._safe_cleanup()
-
-    def _initialize_detection(self):
-        """Inicializa el modelo y la cámara de forma segura"""
-        with QMutexLocker(self._mutex):
-            self.running = True
-            self._stop_event.clear()
+        self.running = True
         
-        # Cargar modelo YOLO
-        if not self._load_model():
-            return
-            
-        # Inicializar cámara
-        if not self._initialize_camera():
-            return
-            
-        logging.info("Detection inicializada correctamente")
-
-    def _load_model(self):
-        """Carga el modelo YOLO con manejo de errores"""
+        # Cargar modelo
         try:
-            if not os.path.exists(self.model_path):
-                error_msg = f"Archivo de modelo no encontrado: {self.model_path}"
-                self.error.emit(error_msg)
-                logging.error(error_msg)
-                return False
-                
             self.model = YOLO(self.model_path)
             logging.info("Modelo YOLO cargado exitosamente.")
-            return True
-            
         except Exception as e:
             error_msg = f"Error al cargar el modelo YOLO: {str(e)}"
             self.error.emit(error_msg)
             logging.error(error_msg)
-            with QMutexLocker(self._mutex):
-                self.running = False
-            return False
+            self.running = False
+            return
+
+        # Inicializar cámara
+        if not self._initialize_camera():
+            return
+            
+        # Iniciar hilo de análisis
+        self._start_analysis_thread()
+        
+        # Loop principal para video
+        retry_count = 0
+        max_retries = 5
+        
+        while self.running:
+            ret, frame = self.cap.read()
+            if not ret:
+                retry_count += 1
+                if retry_count > max_retries:
+                    error_msg = "Error: No se pudo leer el frame de la cámara después de varios intentos."
+                    self.error.emit(error_msg)
+                    logging.error(error_msg)
+                    break
+                time.sleep(0.1)
+                continue
+            
+            retry_count = 0
+            
+            # Siempre actualizar UI para video fluido
+            self.update_ui(frame)
+            
+            # Enviar frame para análisis cada 3 segundos
+            current_time = time.time()
+            if (current_time - self.last_analysis_time) >= self.analysis_interval:
+                self._queue_frame_for_analysis(frame.copy())
+                self.last_analysis_time = current_time
+            
+            # Verificar recursos
+            self.check_resources()
+            
+            # Pequeña pausa para no sobrecargar CPU
+            time.sleep(0.033)  # ~30 FPS
+
+        self.cleanup()
 
     def _initialize_camera(self):
-        """Inicializa la cámara con diferentes backends"""
+        """Inicializar cámara con diferentes backends"""
         backends = [cv2.CAP_DSHOW, cv2.CAP_MSMF, cv2.CAP_ANY]
-        
         for backend in backends:
-            if self._stop_event.is_set():
-                return False
-                
-            try:
-                self.cap = cv2.VideoCapture(0, backend)
-                if self.cap and self.cap.isOpened():
-                    # Configurar parámetros de la cámara
-                    self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-                    self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-                    self.cap.set(cv2.CAP_PROP_FPS, 30)
-                    
-                    # Verificar que realmente funciona
-                    ret, test_frame = self.cap.read()
-                    if ret and test_frame is not None:
-                        logging.info(f"Cámara abierta con backend: {backend}")
-                        return True
-                    else:
-                        self.cap.release()
-                        self.cap = None
-                        
-            except Exception as e:
-                logging.warning(f"Error con backend {backend}: {e}")
-                if self.cap:
-                    self.cap.release()
-                    self.cap = None
+            self.cap = cv2.VideoCapture(0 + backend)
+            if self.cap.isOpened():
+                # Configurar cámara para mejor rendimiento
+                self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                self.cap.set(cv2.CAP_PROP_FPS, 30)
+                logging.info(f"Cámara abierta con backend: {backend}")
+                return True
         
         error_msg = "Error: No se pudo abrir la cámara con ningún backend."
         self.error.emit(error_msg)
         logging.error(error_msg)
-        with QMutexLocker(self._mutex):
-            self.running = False
+        self.running = False
         return False
 
-    def _main_detection_loop(self):
-        """Bucle principal de detección con control robusto"""
-        retry_count = 0
-        max_retries = 5
+    def _start_analysis_thread(self):
+        """Iniciar hilo separado para análisis de frames"""
+        self.analysis_running = True
+        self.analysis_thread = threading.Thread(target=self._analysis_worker, daemon=True)
+        self.analysis_thread.start()
+        logging.info("Hilo de análisis iniciado")
 
-        while self.running and not self._stop_event.is_set():
-            try:
-                # Verificar si debemos parar
-                if self._stop_event.wait(0.001):  # Timeout muy pequeño
-                    break
-                
-                # Leer frame de la cámara
-                ret, frame = self._read_frame_safely()
-                
-                if not ret or frame is None:
-                    retry_count += 1
-                    if retry_count > max_retries:
-                        error_msg = "Error: No se pudo leer el frame de la cámara después de varios intentos."
-                        self.error.emit(error_msg)
-                        logging.error(error_msg)
-                        break
-                    time.sleep(0.1)
-                    continue
-                
-                retry_count = 0
-                self._consecutive_errors = 0
-
-                # Procesar frame
-                self.frame_count += 1
-                if self.frame_count % self.frame_skip == 0:
-                    self._process_frame_safely(frame)
-
-                # Actualizar UI
-                self._update_ui_safely(frame)
-                
-                # Verificar recursos del sistema
-                self._check_resources_safely()
-
-            except Exception as e:
-                self._consecutive_errors += 1
-                error_msg = f"Error en bucle principal: {str(e)}"
-                logging.error(error_msg)
-                
-                if self._consecutive_errors >= self._max_consecutive_errors:
-                    self.error.emit(f"Demasiados errores consecutivos: {error_msg}")
-                    break
-                    
-                time.sleep(0.5)  # Pausa antes de continuar
-
-    def _read_frame_safely(self):
-        """Lee un frame de la cámara de forma segura"""
-        if not self.cap or not self.cap.isOpened():
-            return False, None
-            
+    def _queue_frame_for_analysis(self, frame):
+        """Agregar frame a la cola de análisis"""
         try:
-            return self.cap.read()
+            # Si la cola está llena, remover el frame más antiguo
+            if self.analysis_queue.full():
+                try:
+                    self.analysis_queue.get_nowait()
+                except:
+                    pass
+            
+            self.analysis_queue.put_nowait(frame)
         except Exception as e:
-            logging.error(f"Error leyendo frame: {e}")
-            return False, None
+            logging.warning(f"Error al agregar frame a cola de análisis: {e}")
 
-    def _process_frame_safely(self, frame):
-        """Procesa el frame con detección de armas de forma segura"""
-        if self._stop_event.is_set() or not self.model:
-            return
-            
+    def _analysis_worker(self):
+        """Worker thread para análisis de frames"""
+        logging.info("Worker de análisis iniciado")
+        
+        while self.analysis_running:
+            try:
+                # Esperar por un frame con timeout
+                frame = self.analysis_queue.get(timeout=1)
+                
+                if frame is not None:
+                    self._analyze_frame(frame)
+                    
+            except Exception as e:
+                if self.analysis_running:  # Solo log si no estamos cerrando
+                    logging.debug(f"Timeout o error en análisis: {e}")
+                continue
+
+    def _analyze_frame(self, frame):
+        """Analizar frame con YOLO - MANTENIENDO LÓGICA ORIGINAL"""
         try:
-            # Realizar detección
+            # USAR LA LÓGICA ORIGINAL QUE FUNCIONABA BIEN
             results = self.model(frame, verbose=False)
             
             detection_made = False
+            detected_objects = []
+            
             for r in results:
-                if self._stop_event.is_set():
-                    break
-                    
                 boxes = r.boxes
-                if boxes is None:
-                    continue
-                    
                 for box in boxes:
-                    try:
-                        conf = float(box.conf[0])
-                        cls = int(box.cls[0])
-
-                        if conf > 0.75:
-                            x1, y1, x2, y2 = map(int, box.xyxy[0])
-                            color = self.colors.get(cls, (255, 255, 255))
-                            
-                            # Dibujar rectángulo y etiqueta
-                            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-                            label = f'{self.model.names[cls]} {conf:.2f}'
-                            cv2.putText(frame, label, (x1, y1 - 10), 
-                                      cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
-                            detection_made = True
-                            
-                    except Exception as e:
-                        logging.warning(f"Error procesando detección individual: {e}")
-                        continue
-
-            # Guardar detección si es necesaria
-            if detection_made and not self._stop_event.is_set():
+                    conf = box.conf[0]
+                    cls = int(box.cls[0])
+                    
+                    if conf > 0.5:  # UMBRAL ORIGINAL
+                        detection_made = True
+                        object_name = self.model.names[cls]
+                        detected_objects.append(f"{object_name} ({conf:.2f})")
+                        
+                        # Dibujar detección en frame para guardado - COMO ESTABA ANTES
+                        x1, y1, x2, y2 = map(int, box.xyxy[0])
+                        color = self.colors.get(cls, (255, 255, 255))
+                        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+                        label = f'{object_name} {conf:.2f}'
+                        cv2.putText(frame, label, (x1, y1 - 10), 
+                                  cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
+            
+            # Si hay detección, procesar
+            if detection_made:
+                # Emitir señal de detección para notificación
+                objects_str = ", ".join(detected_objects)
+                self.weaponDetected.emit(f"¡Arma detectada! {objects_str}")
+                
+                # Guardar y enviar si es tiempo
                 current_time = time.time()
                 if (current_time - self.last_capture_time) >= self.capture_interval:
-                    self._save_detection_safely(frame)
+                    self.saveDetection(frame)
                     self.last_capture_time = current_time
-
+                    
         except Exception as e:
-            logging.error(f"Error en procesamiento de frame: {e}")
+            error_msg = f"Error durante el análisis del frame: {str(e)}"
+            self.error.emit(error_msg)
+            logging.error(error_msg)
 
-    def _update_ui_safely(self, frame):
-        """Actualiza la UI de forma segura"""
-        if self._stop_event.is_set():
-            return
-            
+    def update_ui(self, frame):
+        """Actualizar UI con frame de video"""
         try:
-            # Convertir a formato Qt
             rgb_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             h, w, ch = rgb_image.shape
             bytes_per_line = ch * w
-            
-            convert_to_qt_format = QImage(
-                rgb_image.data, w, h, bytes_per_line, QImage.Format_RGB888
-            )
-            
-            # Escalar imagen
-            scaled_image = convert_to_qt_format.scaled(640, 480, Qt.KeepAspectRatio)
-            
-            # Emitir solo si no estamos parando
-            if not self._stop_event.is_set():
-                self.changePixmap.emit(scaled_image)
-                
+            convert_to_qt_format = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format_RGB888)
+            p = convert_to_qt_format.scaled(640, 480, Qt.KeepAspectRatio)
+            self.changePixmap.emit(p)
         except Exception as e:
-            logging.error(f"Error actualizando UI: {e}")
+            logging.error(f"Error al actualizar UI: {e}")
 
-    def _check_resources_safely(self):
-        """Verifica recursos del sistema de forma segura"""
-        if self._stop_event.is_set():
-            return
-            
+    def check_resources(self):
+        """Verificar recursos del sistema"""
         current_time = time.time()
-        if current_time - self.last_resource_check < self.resource_check_interval:
-            return
-            
-        try:
-            # Obtener información de CPU y memoria
-            cpu_percent = psutil.cpu_percent(interval=None)
-            memory_percent = psutil.virtual_memory().percent
-            
-            # Obtener información de GPU
-            gpu_info = self._get_gpu_info_safely()
-            
-            resources = {
-                'cpu': cpu_percent,
-                'memory': memory_percent,
-                **gpu_info
-            }
-            
-            # Emitir solo si no estamos parando
-            if not self._stop_event.is_set():
-                self.resourceUpdate.emit(resources)
+        if current_time - self.last_resource_check >= self.resource_check_interval:
+            try:
+                cpu_percent = psutil.cpu_percent()
+                memory_percent = psutil.virtual_memory().percent
                 
-            self.last_resource_check = current_time
-            
-            logging.debug(f"Recursos: CPU {cpu_percent:.1f}%, "
-                         f"Memoria {memory_percent:.1f}%, "
-                         f"GPU {gpu_info.get('gpu_load', 'N/A')}")
-            
-        except Exception as e:
-            logging.error(f"Error monitoreando recursos: {e}")
+                gpu_info = {}
+                try:
+                    gpus = GPUtil.getGPUs()
+                    if gpus:
+                        gpu = gpus[0]
+                        gpu_info = {
+                            'gpu_load': gpu.load * 100,
+                            'gpu_memory': gpu.memoryUsed / gpu.memoryTotal * 100
+                        }
+                except Exception as e:
+                    logging.warning(f"Error al obtener información de la GPU: {str(e)}")
 
-    def _get_gpu_info_safely(self):
-        """Obtiene información de GPU de forma segura"""
-        gpu_info = {}
-        try:
-            gpus = GPUtil.getGPUs()
-            if gpus and len(gpus) > 0:
-                gpu = gpus[0]
-                gpu_info = {
-                    'gpu_load': gpu.load * 100,
-                    'gpu_memory': gpu.memoryUsed / gpu.memoryTotal * 100 if gpu.memoryTotal > 0 else 0
+                resources = {
+                    'cpu': cpu_percent,
+                    'memory': memory_percent,
+                    **gpu_info
                 }
-        except Exception as e:
-            logging.warning(f"Error obteniendo información de GPU: {e}")
-            gpu_info = {'gpu_load': 0, 'gpu_memory': 0}
-        
-        return gpu_info
-
-    def _save_detection_safely(self, frame):
-        """Guarda la detección de forma segura"""
-        if self._stop_event.is_set():
-            return
+                
+                self.resourceUpdate.emit(resources)
+                logging.debug(f"Recursos actualizados: CPU {cpu_percent:.1f}%, Memoria {memory_percent:.1f}%")
+            except Exception as e:
+                error_msg = f"Error al monitorear recursos: {str(e)}"
+                self.error.emit(error_msg)
+                logging.error(error_msg)
             
+            self.last_resource_check = current_time
+
+    def saveDetection(self, frame):
+        """Guardar frame con detección - Solo mantener 1 archivo"""
         try:
             save_path = self.resource_path("savedFrame")
             if not os.path.exists(save_path):
-                os.makedirs(save_path, exist_ok=True)
-                
-            frame_path = os.path.join(save_path, "frame.jpg")
-            success = cv2.imwrite(frame_path, frame)
+                os.makedirs(save_path)
             
-            if success:
-                logging.info('Frame guardado exitosamente')
-                # Enviar detección al servidor en hilo separado
-                self._post_detection_async()
-            else:
-                logging.error('Error guardando frame')
-                
+            # USAR SIEMPRE EL MISMO NOMBRE DE ARCHIVO para sobrescribir
+            filename = "current_detection.jpg"
+            full_path = os.path.join(save_path, filename)
+            
+            # Eliminar archivo anterior si existe (opcional, cv2.imwrite ya sobrescribe)
+            if os.path.exists(full_path):
+                try:
+                    os.remove(full_path)
+                    logging.debug("Archivo anterior eliminado")
+                except:
+                    pass  # No importa si no se puede eliminar
+            
+            cv2.imwrite(full_path, frame)
+            logging.info(f'Frame guardado (sobrescrito): {filename}')
+            
+            # Enviar en hilo separado para no bloquear
+            threading.Thread(target=self.postDetection, args=(full_path,), daemon=True).start()
+            
         except Exception as e:
-            error_msg = f"Error guardando detección: {str(e)}"
+            error_msg = f"Error al guardar la detección: {str(e)}"
+            self.error.emit(error_msg)
             logging.error(error_msg)
-            if not self._stop_event.is_set():
-                self.error.emit(error_msg)
 
-    def _post_detection_async(self):
-        """Envía la detección al servidor de forma asíncrona"""
-        if self._stop_event.is_set():
-            return
-            
+    def postDetection(self, image_path):
+        """Enviar detección al servidor"""
         try:
-            url = 'https://weapondetectionsystem.onrender.com/api/images/'
+            url = 'https://weaponnotificationserver.onrender.com/api/images/'
             headers = {'Authorization': 'Token ' + self.token}
             
-            frame_path = self.resource_path('savedFrame/frame.jpg')
-            if not os.path.exists(frame_path):
-                logging.error("Archivo de frame no encontrado para envío")
-                return
-            
-            with open(frame_path, 'rb') as f:
-                files = {'image': f}
-                data = {
-                    'userID': self.token, 
-                    'location': self.location, 
-                    'alertReceiver': self.receiver
-                }
+            with open(image_path, 'rb') as img_file:
+                files = {'image': img_file}
+                data = {'userID': self.token, 'location': self.location, 'alertReceiver': self.receiver}
                 
-                response = requests.post(
-                    url, files=files, headers=headers, data=data, timeout=10
-                )
+                response = requests.post(url, files=files, headers=headers, data=data, timeout=30)
 
             if response.ok:
                 logging.info('Alerta enviada al servidor exitosamente')
             else:
-                error_msg = f'Error enviando alerta. Código: {response.status_code}'
+                error_msg = f'Error al enviar alerta. Código: {response.status_code}'
+                self.error.emit(error_msg)
                 logging.error(error_msg)
                 
         except requests.exceptions.Timeout:
-            logging.error('Timeout al conectar con el servidor')
+            error_msg = 'Timeout al conectar con el servidor'
+            self.error.emit(error_msg)
+            logging.error(error_msg)
         except requests.exceptions.ConnectionError:
-            logging.error('Error de conexión con el servidor')
+            error_msg = 'Error de conexión con el servidor'
+            self.error.emit(error_msg)
+            logging.error(error_msg)
         except Exception as e:
-            error_msg = f'Error accediendo al servidor: {str(e)}'
+            error_msg = f'Error al acceder al servidor: {str(e)}'
+            self.error.emit(error_msg)
             logging.error(error_msg)
 
-    def stop(self):
-        """Detiene el hilo de detección de forma segura"""
-        logging.info("Iniciando parada segura del hilo de detección")
+    def cleanup(self):
+        """Limpiar recursos"""
+        # Detener hilo de análisis
+        self.analysis_running = False
+        if self.analysis_thread and self.analysis_thread.is_alive():
+            self.analysis_thread.join(timeout=2)
         
-        with QMutexLocker(self._mutex):
-            self.running = False
+        # Limpiar cola
+        while not self.analysis_queue.empty():
+            try:
+                self.analysis_queue.get_nowait()
+            except:
+                break
+        
+        # Liberar cámara
+        if self.cap:
+            self.cap.release()
             
-        # Señalar parada
-        self._stop_event.set()
-        
-        # Esperar un momento para que el hilo procese la señal
-        time.sleep(0.1)
+        logging.info("Recursos liberados correctamente")
 
-    def _safe_cleanup(self):
-        """Limpia recursos de forma segura"""
-        logging.info("Iniciando limpieza segura de recursos")
-        
-        try:
-            # Limpiar cámara
-            if self.cap:
-                try:
-                    self.cap.release()
-                    self.cap = None
-                    logging.info("Cámara liberada")
-                except Exception as e:
-                    logging.error(f"Error liberando cámara: {e}")
-            
-            # Limpiar modelo
-            if self.model:
-                try:
-                    del self.model
-                    self.model = None
-                    logging.info("Modelo YOLO limpiado")
-                except Exception as e:
-                    logging.error(f"Error limpiando modelo: {e}")
-            
-            # Forzar recolección de basura
-            gc.collect()
-            
-            logging.info("Limpieza de recursos completada")
-            
-        except Exception as e:
-            logging.error(f"Error durante limpieza: {e}")
+    def stop(self):
+        """Detener detección"""
+        self.running = False
+        self.analysis_running = False
+        logging.info("Deteniendo detección")
 
     def resource_path(self, relative_path):
-        """Obtiene la ruta del recurso de forma segura"""
-        try:
-            if hasattr(sys, '_MEIPASS'):
-                return os.path.join(sys._MEIPASS, relative_path)
-            return os.path.join(os.path.abspath("."), relative_path)
-        except Exception as e:
-            logging.error(f"Error obteniendo ruta del recurso: {e}")
-            return relative_path
-
-    def __del__(self):
-        """Destructor para limpieza final"""
-        try:
-            self.stop()
-            self._safe_cleanup()
-        except Exception as e:
-            logging.error(f"Error en destructor: {e}")
+        """Obtener ruta de recurso"""
+        if hasattr(sys, '_MEIPASS'):
+            return os.path.join(sys._MEIPASS, relative_path)
+        return os.path.join(os.path.abspath("."), relative_path)
