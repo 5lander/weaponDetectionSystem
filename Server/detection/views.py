@@ -27,7 +27,7 @@ from .email_utils import send_password_reset_email, get_queue_status
 import logging
 
 
-
+logger = logging.getLogger(__name__)
 
 def loginPage(request):
 	if request.user.is_authenticated:

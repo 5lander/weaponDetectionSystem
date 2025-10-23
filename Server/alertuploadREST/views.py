@@ -22,7 +22,6 @@ def start_new_thread(function):
         t.start()
     return decorator
 
-##prueba para nueva rama 
 @api_view(['POST'])
 def postAlert(request):
     serializer = UploadAlertSerializer(data=request.data)
@@ -47,7 +46,7 @@ def identify_email_sms(serializer):
     print(f"Ruta de imagen: {image_path}")
 
     if(re.search('^[a-z0-9]+[\._]?[a-z0-9]+[@]\w+[.]\w{2,3}$', receiver)):  
-        print("Correo electrónico válido - Enviando correo...")
+        print("Correo electrónico válido - Enviando correo vía SendGrid...")
         send_enhanced_email(serializer)
     elif re.compile("[+593][0-9]{10}").match(receiver):
         print("Número de teléfono válido - Enviando SMS...")
@@ -58,7 +57,7 @@ def identify_email_sms(serializer):
 @start_new_thread
 def send_enhanced_email(serializer):
     try:
-        print("Iniciando proceso de envío de correo mejorado...")
+        print("Iniciando proceso de envío de correo mejorado vía SendGrid...")
         
         # Extraer datos del serializador
         alert_data = extract_alert_data(serializer)
@@ -76,7 +75,7 @@ def send_enhanced_email(serializer):
         email = EmailMultiAlternatives(
             subject=subject,
             body=text_content,
-            from_email='Sistema de Detección de Armas <weaponsys1em@gmail.com>',
+            from_email=settings.DEFAULT_FROM_EMAIL,
             to=[serializer.data['alertReceiver']]
         )
         
@@ -86,14 +85,15 @@ def send_enhanced_email(serializer):
         print(f"Detalles del correo:")
         print(f"  Asunto: {subject}")
         print(f"  Para: {serializer.data['alertReceiver']}")
+        print(f"  De: {settings.DEFAULT_FROM_EMAIL}")
         print(f"  Longitud de contenido HTML: {len(html_content)} caracteres")
         
-        # Enviar correo
+        # Enviar correo vía SendGrid
         result = email.send(fail_silently=False)
         
         print(f"Resultado del envío: {result}")
         if result == 1:
-            print("¡Correo mejorado enviado exitosamente!")
+            print("✅ Correo mejorado enviado exitosamente vía SendGrid!")
         else:
             print("Falló el envío del correo - sin error pero el resultado fue 0")
             
@@ -115,12 +115,12 @@ def send_simple_email_fallback(serializer):
         result = send_mail(
             subject='🚨 Alerta de Seguridad - Arma Detectada',
             message=create_text_email(alert_data),
-            from_email='weaponsys1em@gmail.com',
+            from_email=settings.DEFAULT_FROM_EMAIL,
             recipient_list=[serializer.data['alertReceiver']],
             fail_silently=False,
         )
         
-        print(f"Resultado de correo de respaldo: {result}")
+        print(f"Resultado de correo de respaldo vía SendGrid: {result}")
         
     except Exception as e:
         print(f"Error en correo de respaldo: {e}")

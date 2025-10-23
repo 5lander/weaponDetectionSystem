@@ -1,6 +1,7 @@
 """
-Sistema de envío de emails asíncrono optimizado para Gmail SMTP
+Sistema de envío de emails asíncrono optimizado para SendGrid SMTP
 Evita bloqueos y timeouts en el servidor
+SendGrid es más rápido y confiable que Gmail
 """
 from threading import Thread, Lock
 from queue import Queue, Empty
@@ -29,21 +30,21 @@ stats = {
 
 class EmailWorker(Thread):
     """
-    Worker dedicado que procesa emails de forma asíncrona
+    Worker dedicado que procesa emails de forma asíncrona con SendGrid
     Corre en un thread separado sin bloquear el servidor
     """
     
-    def __init__(self, max_retries=3, retry_delay=2):
+    def __init__(self, max_retries=3, retry_delay=1):
         Thread.__init__(self)
         self.daemon = True  # Se cierra automáticamente
         self._running = True
         self.max_retries = max_retries
-        self.retry_delay = retry_delay
+        self.retry_delay = retry_delay  # SendGrid es rápido, menos delay
         stats['processing'] = True
     
     def run(self):
         """Loop principal que procesa emails continuamente"""
-        logger.info("🚀 Gmail Email Worker iniciado y listo")
+        logger.info("🚀 SendGrid Email Worker iniciado y listo")
         
         while self._running:
             try:
@@ -94,10 +95,10 @@ class EmailWorker(Thread):
         return False
     
     def _send_email(self, email_data, attempt=1):
-        """Envía un email individual"""
+        """Envía un email individual usando SendGrid"""
         start_time = time.time()
         
-        logger.info(f"📧 [Intento {attempt}] Enviando a {email_data['to']}")
+        logger.info(f"📧 [Intento {attempt}] Enviando vía SendGrid a {email_data['to']}")
         
         try:
             # Crear email multipart
@@ -112,13 +113,13 @@ class EmailWorker(Thread):
             if email_data.get('html_content'):
                 email.attach_alternative(email_data['html_content'], "text/html")
             
-            # Enviar con timeout
+            # Enviar con timeout (SendGrid suele responder en 1-3 segundos)
             result = email.send(fail_silently=False)
             
             elapsed = time.time() - start_time
             
             if result == 1:
-                logger.info(f"✅ Email enviado exitosamente en {elapsed:.2f}s a {email_data['to']}")
+                logger.info(f"✅ Email enviado vía SendGrid en {elapsed:.2f}s a {email_data['to']}")
                 return True
             else:
                 logger.warning(f"⚠️ Email.send() retornó {result}")
@@ -126,7 +127,7 @@ class EmailWorker(Thread):
                 
         except Exception as e:
             elapsed = time.time() - start_time
-            logger.error(f"❌ Error enviando email después de {elapsed:.2f}s: {e}")
+            logger.error(f"❌ Error enviando email vía SendGrid después de {elapsed:.2f}s: {e}")
             raise
     
     def stop(self):
@@ -144,9 +145,9 @@ def start_email_worker():
     global _email_worker
     
     if _email_worker is None or not _email_worker.is_alive():
-        _email_worker = EmailWorker(max_retries=3, retry_delay=2)
+        _email_worker = EmailWorker(max_retries=3, retry_delay=1)
         _email_worker.start()
-        logger.info("✅ Email Worker iniciado")
+        logger.info("✅ SendGrid Email Worker iniciado")
     
     return _email_worker
 
@@ -156,7 +157,7 @@ start_email_worker()
 
 def send_email_async(subject, text_content, to_emails, html_content=None, from_email=None):
     """
-    Encola un email para envío asíncrono
+    Encola un email para envío asíncrono vía SendGrid
     
     Args:
         subject (str): Asunto del email
@@ -174,7 +175,7 @@ def send_email_async(subject, text_content, to_emails, html_content=None, from_e
         return False
     
     if not from_email:
-        from_email = settings.DEFAULT_FROM_EMAIL or settings.EMAIL_HOST_USER
+        from_email = settings.DEFAULT_FROM_EMAIL
     
     # Convertir a lista si es string
     if isinstance(to_emails, str):
@@ -203,7 +204,7 @@ def send_email_async(subject, text_content, to_emails, html_content=None, from_e
             stats['queued'] += 1
         
         queue_size = email_queue.qsize()
-        logger.info(f"📨 Email encolado para {to_emails} (cola: {queue_size})")
+        logger.info(f"📨 Email encolado para SendGrid: {to_emails} (cola: {queue_size})")
         
         return True
         
@@ -214,7 +215,7 @@ def send_email_async(subject, text_content, to_emails, html_content=None, from_e
 
 def send_password_reset_email(user, uid, token, domain, protocol='https'):
     """
-    Envía email de restablecimiento de contraseña de forma asíncrona
+    Envía email de restablecimiento de contraseña de forma asíncrona vía SendGrid
     
     Args:
         user: Usuario de Django
@@ -276,7 +277,7 @@ Este es un mensaje automático, por favor no respondas.
     # Asunto del email
     subject = '🔐 Restablecimiento de Contraseña - Sistema de Detección de Armas'
     
-    # Enviar de forma asíncrona
+    # Enviar de forma asíncrona vía SendGrid
     success = send_email_async(
         subject=subject,
         text_content=text_content,
@@ -285,7 +286,7 @@ Este es un mensaje automático, por favor no respondas.
     )
     
     if success:
-        logger.info(f"✉️ Email de reset encolado para {user.email}")
+        logger.info(f"✉️ Email de reset encolado para SendGrid: {user.email}")
     else:
         logger.error(f"❌ No se pudo encolar email para {user.email}")
     
@@ -346,10 +347,10 @@ def reset_stats():
 
 # Función para debugging
 def print_status():
-    """Imprime el estado actual del sistema"""
+    """Imprime el estado actual del sistema de SendGrid"""
     status = get_queue_status()
     print("\n" + "="*50)
-    print("📊 ESTADO DEL SISTEMA DE EMAILS")
+    print("📊 ESTADO DEL SISTEMA DE EMAILS (SENDGRID)")
     print("="*50)
     print(f"Cola: {status['queue_size']} emails pendientes")
     print(f"Enviados: {status['sent']}")
