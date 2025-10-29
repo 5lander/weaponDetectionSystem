@@ -499,7 +499,7 @@ class DetectionTapo(QThread):
     def _upload_to_server(self, filepath, detections):
         """Subir detección al servidor"""
         try:
-            url = 'http://tu-servidor.com/api/upload'
+            url = 'https://weaponnotificationserver.onrender.com/api/images/'
             
             files = {'image': open(filepath, 'rb')}
             data = {

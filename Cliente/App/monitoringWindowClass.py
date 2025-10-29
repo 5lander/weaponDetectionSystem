@@ -127,7 +127,7 @@ class MonitoringWindow(QMainWindow):
         title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet("color: #2c3e50; margin: 10px;")
         
-        subtitle = QLabel(f"Gestiona tus {total_cameras} cámara(s) Tapo C310")
+        subtitle = QLabel(f"Gestiona tus {total_cameras} cámara(s)")
         subtitle.setFont(QFont("Segoe UI", 10))
         subtitle.setAlignment(Qt.AlignCenter)
         subtitle.setStyleSheet("color: #7f8c8d; margin-bottom: 20px;")

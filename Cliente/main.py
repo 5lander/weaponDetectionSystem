@@ -6,7 +6,6 @@ from PyQt5.QtWidgets import QApplication
 from PyQt5.QtCore import QObject, QSharedMemory
 from App.loginWindowClass import LoginWindow
 from App.monitoringWindowClass import MonitoringWindow
-from App.detectionWindow import DetectionWindow
 from App.detectionWindowDual import DetectionWindowDual
 from App.detection_tapo import DetectionTapo
 from App.cameras_config import GLOBAL_CONFIG
@@ -180,7 +179,7 @@ class MainApplication(QObject):
                 
                 # Crear instancia de DetectionTapo
                 detection = DetectionTapo(
-                    model_path=GLOBAL_CONFIG['model_path'],
+                    model_path='model/last.pt',
                     token=token,
                     location=config['location'],
                     receiver=receiver,
