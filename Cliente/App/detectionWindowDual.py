@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 """
-detectionWindowDual.py - Ventana de visualización para 2 cámaras
-Muestra ambas cámaras simultáneamente con métricas en tiempo real
+detectionWindowDual.py - VISTA ESCALABLE CON GRID DINÁMICO
+Soporta 1 a N cámaras con distribución inteligente
 """
 
 import sys
+import math
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QLabel, QPushButton,
                              QVBoxLayout, QHBoxLayout, QGridLayout, QGroupBox,
-                             QMessageBox, QFrame)
+                             QMessageBox, QFrame, QScrollArea)
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QFont, QPixmap
 import logging
@@ -15,11 +16,15 @@ import logging
 
 class DetectionWindowDual(QMainWindow):
     """
-    Ventana optimizada para mostrar 2 cámaras simultáneamente
-    con información de rendimiento y detecciones
+    Ventana optimizada para mostrar N cámaras en grid dinámico
+    - 1 cámara: Pantalla completa
+    - 2 cámaras: 1x2 (lado a lado)
+    - 3-4 cámaras: Grid 2x2
+    - 5-6 cámaras: Grid 2x3
+    - 7-9 cámaras: Grid 3x3
+    - 10+ cámaras: Scroll vertical
     """
     
-    # Señal para notificar cuando se cierra
     closed = pyqtSignal()
     
     def __init__(self, detection_threads):
@@ -30,10 +35,16 @@ class DetectionWindowDual(QMainWindow):
         super(DetectionWindowDual, self).__init__()
         
         self.detection_threads = detection_threads
+        self.num_cameras = len(detection_threads)
+        
+        # Widgets para cada cámara
         self.camera_labels = {}
         self.status_labels = {}
         self.fps_labels = {}
         self.detection_labels = {}
+        
+        # Calcular dimensiones de grid
+        self.grid_rows, self.grid_cols = self.calculate_grid_dimensions()
         
         self.setupUI()
         self.start_detections()
@@ -41,12 +52,52 @@ class DetectionWindowDual(QMainWindow):
         # Timer para actualizar métricas
         self.metrics_timer = QTimer()
         self.metrics_timer.timeout.connect(self.update_metrics)
-        self.metrics_timer.start(1000)  # Actualizar cada segundo
+        self.metrics_timer.start(1000)
         
-        logging.info(f"DetectionWindowDual iniciada con {len(detection_threads)} cámara(s)")
+        logging.info(f"DetectionWindow con {self.num_cameras} cámara(s) - Grid {self.grid_rows}x{self.grid_cols}")
+    
+    def calculate_grid_dimensions(self):
+        """Calcular dimensiones óptimas del grid según número de cámaras"""
+        n = self.num_cameras
+        
+        if n == 1:
+            return 1, 1
+        elif n == 2:
+            return 1, 2
+        elif n <= 4:
+            return 2, 2
+        elif n <= 6:
+            return 2, 3
+        elif n <= 9:
+            return 3, 3
+        elif n <= 12:
+            return 3, 4
+        elif n <= 16:
+            return 4, 4
+        else:
+            # Para más de 16, usar grid de 4 columnas con scroll
+            cols = 4
+            rows = math.ceil(n / cols)
+            return rows, cols
+    
+    def calculate_camera_size(self):
+        """Calcular tamaño de cada cámara según el grid"""
+        # Tamaños base según número de cámaras
+        if self.num_cameras == 1:
+            return 960, 720
+        elif self.num_cameras == 2:
+            return 640, 480
+        elif self.num_cameras <= 4:
+            return 560, 420
+        elif self.num_cameras <= 6:
+            return 480, 360
+        elif self.num_cameras <= 9:
+            return 420, 315
+        else:
+            return 380, 285
     
     def setupUI(self):
-        """Configurar interfaz de usuario"""
+        """Configurar interfaz de usuario DINÁMICA"""
         
         # Widget central
         central_widget = QWidget()
@@ -62,7 +113,7 @@ class DetectionWindowDual(QMainWindow):
         # ==========================================
         header_layout = QHBoxLayout()
         
-        title = QLabel("🎥 Sistema de Monitoreo Multi-Cámara")
+        title = QLabel(f"🎥 Monitoreo de {self.num_cameras} Cámara(s)")
         title.setFont(QFont("Segoe UI", 16, QFont.Bold))
         title.setStyleSheet("color: #2c3e50;")
         
@@ -84,27 +135,32 @@ class DetectionWindowDual(QMainWindow):
         main_layout.addWidget(line)
         
         # ==========================================
-        # GRID DE CÁMARAS
+        # SCROLL AREA PARA GRID DE CÁMARAS
         # ==========================================
-        cameras_layout = QGridLayout()
-        cameras_layout.setSpacing(15)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
         
-        # Determinar layout según número de cámaras
-        num_cameras = len(self.detection_threads)
+        # Widget del grid
+        grid_widget = QWidget()
+        cameras_layout = QGridLayout(grid_widget)
+        cameras_layout.setSpacing(10)
         
-        if num_cameras == 1:
-            # Una sola cámara - pantalla completa
-            cam_id = list(self.detection_threads.keys())[0]
-            cam_widget = self.create_camera_widget(cam_id)
-            cameras_layout.addWidget(cam_widget, 0, 0, 1, 2)
+        # Calcular tamaño de cámaras
+        cam_width, cam_height = self.calculate_camera_size()
         
-        elif num_cameras == 2:
-            # Dos cámaras - lado a lado
-            for idx, cam_id in enumerate(sorted(self.detection_threads.keys())):
-                cam_widget = self.create_camera_widget(cam_id)
-                cameras_layout.addWidget(cam_widget, 0, idx)
+        # Crear widgets de cámaras en grid
+        sorted_cameras = sorted(self.detection_threads.keys())
         
-        main_layout.addLayout(cameras_layout)
+        for idx, cam_id in enumerate(sorted_cameras):
+            row = idx // self.grid_cols
+            col = idx % self.grid_cols
+            
+            cam_widget = self.create_camera_widget(cam_id, cam_width, cam_height)
+            cameras_layout.addWidget(cam_widget, row, col)
+        
+        scroll.setWidget(grid_widget)
+        main_layout.addWidget(scroll)
         
         # ==========================================
         # PANEL DE INFORMACIÓN GLOBAL
@@ -121,7 +177,7 @@ class DetectionWindowDual(QMainWindow):
         self.ram_label = QLabel("RAM: --%")
         self.ram_label.setFont(QFont("Segoe UI", 10))
         
-        # GPU (si disponible)
+        # GPU
         self.gpu_label = QLabel("GPU: --%")
         self.gpu_label.setFont(QFont("Segoe UI", 10))
         
@@ -130,9 +186,14 @@ class DetectionWindowDual(QMainWindow):
         self.total_detections_label.setFont(QFont("Segoe UI", 10, QFont.Bold))
         self.total_detections_label.setStyleSheet("color: #e74c3c;")
         
+        # FPS promedio
+        self.avg_fps_label = QLabel("FPS Promedio: 0.0")
+        self.avg_fps_label.setFont(QFont("Segoe UI", 10))
+        
         info_layout.addWidget(self.cpu_label)
         info_layout.addWidget(self.ram_label)
         info_layout.addWidget(self.gpu_label)
+        info_layout.addWidget(self.avg_fps_label)
         info_layout.addStretch()
         info_layout.addWidget(self.total_detections_label)
         
@@ -185,57 +246,67 @@ class DetectionWindowDual(QMainWindow):
         
         main_layout.addLayout(button_layout)
         
-        # Configuración de ventana
-        self.setWindowTitle("Monitoreo Activo - Weapon Detection System")
-        self.setMinimumSize(1400, 850)
+        # ==========================================
+        # CONFIGURACIÓN DE VENTANA (TAMAÑO DINÁMICO)
+        # ==========================================
+        # Calcular tamaño de ventana según grid
+        window_width = min(1920, (cam_width + 20) * self.grid_cols + 60)
+        window_height = min(1080, (cam_height + 100) * min(self.grid_rows, 3) + 300)
+        
+        self.setWindowTitle(f"Monitoreo Activo - {self.num_cameras} Cámara(s)")
+        self.setMinimumSize(window_width, window_height)
         
         # Centrar en pantalla
         self.center_window()
     
-    def create_camera_widget(self, camera_id):
+    def create_camera_widget(self, camera_id, width, height):
         """Crear widget para una cámara individual"""
         group = QGroupBox(f"📹 Cámara {camera_id}")
-        group.setFont(QFont("Segoe UI", 11, QFont.Bold))
+        group.setFont(QFont("Segoe UI", 10, QFont.Bold))
         
         layout = QVBoxLayout()
-        layout.setSpacing(10)
+        layout.setSpacing(8)
+        layout.setContentsMargins(8, 8, 8, 8)
         
         # Video label
         video_label = QLabel()
-        video_label.setMinimumSize(640, 480)
-        video_label.setMaximumSize(800, 600)
+        video_label.setFixedSize(width, height)
         video_label.setAlignment(Qt.AlignCenter)
         video_label.setStyleSheet("""
             QLabel {
                 background-color: #2c3e50;
                 border: 2px solid #34495e;
                 border-radius: 5px;
+                color: white;
             }
         """)
         video_label.setText("🎥\nConectando...")
-        video_label.setFont(QFont("Segoe UI", 14))
-        video_label.setStyleSheet(video_label.styleSheet() + "color: white;")
+        video_label.setFont(QFont("Segoe UI", 12))
         
         self.camera_labels[camera_id] = video_label
         layout.addWidget(video_label)
         
-        # Panel de información de cámara
+        # Panel de información compacto
         info_layout = QHBoxLayout()
+        info_layout.setSpacing(5)
         
         # Status
-        status_label = QLabel("Estado: Iniciando...")
-        status_label.setFont(QFont("Segoe UI", 9))
+        status_label = QLabel("⏳")
+        status_label.setFont(QFont("Segoe UI", 8))
+        status_label.setMaximumWidth(150)
         self.status_labels[camera_id] = status_label
         
         # FPS
-        fps_label = QLabel("FPS: 0.0")
-        fps_label.setFont(QFont("Segoe UI", 9))
+        fps_label = QLabel("FPS: 0")
+        fps_label.setFont(QFont("Segoe UI", 8))
+        fps_label.setMaximumWidth(60)
         self.fps_labels[camera_id] = fps_label
         
         # Detecciones
-        detection_label = QLabel("Detecciones: 0")
-        detection_label.setFont(QFont("Segoe UI", 9, QFont.Bold))
+        detection_label = QLabel("Det: 0")
+        detection_label.setFont(QFont("Segoe UI", 8, QFont.Bold))
         detection_label.setStyleSheet("color: #e74c3c;")
+        detection_label.setMaximumWidth(60)
         self.detection_labels[camera_id] = detection_label
         
         info_layout.addWidget(status_label)
@@ -275,14 +346,15 @@ class DetectionWindowDual(QMainWindow):
     def update_camera_status(self, camera_id, message):
         """Actualizar estado de cámara"""
         if camera_id in self.status_labels:
-            self.status_labels[camera_id].setText(message)
+            # Extraer solo texto relevante (quitar [Cámara N])
+            clean_msg = message.split(']')[-1].strip() if ']' in message else message
+            self.status_labels[camera_id].setText(clean_msg[:20])
         
         # Actualizar FPS si viene en el mensaje
-        if "FPS" in message:
+        if "FPS" in message and camera_id in self.fps_labels:
             try:
                 fps = message.split("FPS")[0].split()[-1]
-                if camera_id in self.fps_labels:
-                    self.fps_labels[camera_id].setText(f"FPS: {fps}")
+                self.fps_labels[camera_id].setText(f"FPS: {fps}")
             except:
                 pass
     
@@ -308,6 +380,15 @@ class DetectionWindowDual(QMainWindow):
             current = self.total_detections_label.text()
             count = int(current.split(":")[-1].strip())
             self.total_detections_label.setText(f"Detecciones: {count + 1}")
+            
+            # Actualizar contador por cámara
+            for cam_id in self.detection_threads.keys():
+                if f"Cámara {cam_id}" in message:
+                    if cam_id in self.detection_labels:
+                        label = self.detection_labels[cam_id]
+                        current_det = int(label.text().split(":")[-1].strip())
+                        label.setText(f"Det: {current_det + 1}")
+                    break
         except:
             pass
         
@@ -322,17 +403,29 @@ class DetectionWindowDual(QMainWindow):
     def on_error(self, error_message):
         """Manejar errores"""
         logging.error(f"ERROR: {error_message}")
-        QMessageBox.warning(self, "Error en Sistema", error_message)
+        # No mostrar popup para evitar interrumpir monitoreo
+        # QMessageBox.warning(self, "Error en Sistema", error_message)
     
     def update_metrics(self):
         """Actualizar métricas cada segundo"""
-        # Esta función se ejecuta periódicamente
-        # Aquí puedes agregar lógica adicional si necesitas
-        pass
+        # Calcular FPS promedio
+        try:
+            fps_values = []
+            for label in self.fps_labels.values():
+                try:
+                    fps = float(label.text().split(":")[-1].strip())
+                    fps_values.append(fps)
+                except:
+                    pass
+            
+            if fps_values:
+                avg_fps = sum(fps_values) / len(fps_values)
+                self.avg_fps_label.setText(f"FPS Promedio: {avg_fps:.1f}")
+        except:
+            pass
     
     def toggle_pause(self):
         """Pausar/Reanudar sistema"""
-        # Implementar lógica de pausa si necesario
         if self.pauseButton.text() == "⏸ Pausar Sistema":
             self.pauseButton.setText("▶️ Reanudar Sistema")
             self.system_status.setText("● SISTEMA PAUSADO")
@@ -357,13 +450,10 @@ class DetectionWindowDual(QMainWindow):
             # Detener todos los threads
             for detection in self.detection_threads.values():
                 detection.stop()
-                detection.wait(5000)  # Esperar máximo 5 segundos
+                detection.wait(5000)
             
             self.metrics_timer.stop()
-            
-            # Emitir señal antes de cerrar
             self.closed.emit()
-            
             self.close()
             
             logging.info("Sistema detenido correctamente")
@@ -388,15 +478,12 @@ class DetectionWindowDual(QMainWindow):
         )
         
         if reply == QMessageBox.Yes:
-            logging.info("Cerrando sistema de detección - Usuario confirmó")
+            logging.info("Cerrando sistema - Usuario confirmó")
             
-            # Detener threads
             for detection in self.detection_threads.values():
                 detection.stop()
             
             self.metrics_timer.stop()
-            
-            # Emitir señal de cierre
             self.closed.emit()
             
             event.accept()

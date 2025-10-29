@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-monitoringWindowClass.py - VERSIÓN DUAL CAMERA OPTIMIZADA
-Soporte completo para 2 cámaras Tapo C310 simultáneas
+monitoringWindowClass.py - VERSIÓN COMPLETAMENTE ESCALABLE
+Soporta cualquier número de cámaras dinámicamente
 """
 
 import sys
@@ -16,13 +16,14 @@ import logging
 import cv2
 
 # Importar configuración de cámaras
-from .cameras_config import CAMERAS_CONFIG, GLOBAL_CONFIG, get_enabled_cameras
+from .cameras_config import (CAMERAS_CONFIG, GLOBAL_CONFIG, get_enabled_cameras,
+                             get_total_cameras, get_camera_number)
 
 
 class MonitoringWindow(QMainWindow):
     """
-    Ventana de configuración para sistema multi-cámara
-    Soporta hasta 2 cámaras Tapo C310 simultáneas
+    Ventana de configuración ESCALABLE para sistema multi-cámara
+    Detecta automáticamente el número de cámaras configuradas
     """
     startMonitoringSignal = pyqtSignal(dict)
     
@@ -31,13 +32,17 @@ class MonitoringWindow(QMainWindow):
         self.token = token
         self.detection_threads = {}
         
+        # Diccionarios para almacenar widgets de cada cámara
+        self.camera_widgets = {}
+        
         self.setupUI()
         self.load_camera_configs()
         
-        logging.info("MonitoringWindow Multi-Cámara inicializada")
+        total_cams = get_total_cameras()
+        logging.info(f"MonitoringWindow inicializada - {total_cams} cámara(s) detectada(s)")
     
     def setupUI(self):
-        """Configurar interfaz de usuario"""
+        """Configurar interfaz de usuario DINÁMICA"""
         
         # Widget central con scroll
         central_widget = QWidget()
@@ -49,16 +54,18 @@ class MonitoringWindow(QMainWindow):
         main_layout.setContentsMargins(30, 30, 30, 30)
         
         # ==========================================
-        # ENCABEZADO
+        # ENCABEZADO DINÁMICO
         # ==========================================
+        total_cameras = get_total_cameras()
+        
         header_layout = QVBoxLayout()
         
-        title = QLabel("🎥 Sistema Multi-Cámara de Detección")
+        title = QLabel(f"🎥 Sistema Multi-Cámara de Detección")
         title.setFont(QFont("Segoe UI", 18, QFont.Bold))
         title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet("color: #2c3e50; margin: 10px;")
         
-        subtitle = QLabel("Configure sus cámaras Tapo C310 para monitoreo inteligente")
+        subtitle = QLabel(f"Gestiona tus {total_cameras} cámara(s)")
         subtitle.setFont(QFont("Segoe UI", 10))
         subtitle.setAlignment(Qt.AlignCenter)
         subtitle.setStyleSheet("color: #7f8c8d; margin-bottom: 20px;")
@@ -74,18 +81,25 @@ class MonitoringWindow(QMainWindow):
         main_layout.addWidget(line)
         
         # ==========================================
-        # TABS PARA CÁMARAS CON SCROLL
+        # TABS DINÁMICOS PARA CÁMARAS
         # ==========================================
         self.camera_tabs = QTabWidget()
         self.camera_tabs.setFont(QFont("Segoe UI", 10))
         
-        # Tab para Cámara 1
-        self.cam1_widget = self.create_camera_tab(1)
-        self.camera_tabs.addTab(self.cam1_widget, "📹 Cámara 1 - Principal")
-        
-        # Tab para Cámara 2
-        self.cam2_widget = self.create_camera_tab(2)
-        self.camera_tabs.addTab(self.cam2_widget, "📹 Cámara 2 - Secundaria")
+        # Crear tabs dinámicamente según CAMERAS_CONFIG
+        for camera_key in sorted(CAMERAS_CONFIG.keys(), 
+                                key=lambda x: get_camera_number(x)):
+            camera_num = get_camera_number(camera_key)
+            camera_name = CAMERAS_CONFIG[camera_key].get('name', f'Cámara {camera_num}')
+            
+            # Crear tab
+            camera_widget = self.create_camera_tab(camera_key, camera_num)
+            
+            # Icono según el número
+            icon = "📹" if camera_num <= 2 else "🎥"
+            self.camera_tabs.addTab(camera_widget, f"{icon} {camera_name}")
+            
+            logging.info(f"Tab creado para {camera_key}: {camera_name}")
         
         main_layout.addWidget(self.camera_tabs)
         
@@ -105,6 +119,24 @@ class MonitoringWindow(QMainWindow):
         global_layout.addRow("📧 Receptor de Alertas:", self.receiveInput)
         global_group.setLayout(global_layout)
         main_layout.addWidget(global_group)
+        
+        # ==========================================
+        # ESTADÍSTICAS
+        # ==========================================
+        stats_layout = QHBoxLayout()
+        
+        enabled_count = len([c for c in CAMERAS_CONFIG.values() if c.get('enabled', True)])
+        
+        stats_label = QLabel(
+            f"📊 Total: {total_cameras} | "
+            f"✅ Habilitadas: {enabled_count} | "
+            f"⚪ Deshabilitadas: {total_cameras - enabled_count}"
+        )
+        stats_label.setFont(QFont("Segoe UI", 9))
+        stats_label.setStyleSheet("color: #34495e; padding: 5px;")
+        
+        stats_layout.addWidget(stats_label)
+        main_layout.addLayout(stats_layout)
         
         # ==========================================
         # BOTONES DE ACCIÓN
@@ -131,7 +163,7 @@ class MonitoringWindow(QMainWindow):
         self.testAllButton.clicked.connect(self.test_all_cameras)
         
         # Botón Iniciar Sistema
-        self.startButton = QPushButton("▶️ Iniciar Sistema de Monitoreo")
+        self.startButton = QPushButton(f"▶️ Iniciar Sistema ({enabled_count} cámaras)")
         self.startButton.setMinimumHeight(50)
         self.startButton.setFont(QFont("Segoe UI", 11, QFont.Bold))
         self.startButton.setStyleSheet("""
@@ -172,11 +204,12 @@ class MonitoringWindow(QMainWindow):
         
         main_layout.addLayout(button_layout)
         
-        # Configuración de ventana
-        self.setWindowTitle("Sistema Multi-Cámara - Weapon Detection")
-        self.setMinimumSize(900, 800)  # AUMENTADO ALTURA
+        # Configuración de ventana (tamaño adaptativo)
+        window_height = min(900, 600 + (total_cameras * 50))
+        self.setWindowTitle(f"Sistema Multi-Cámara ({total_cameras}) - Weapon Detection")
+        self.setMinimumSize(900, window_height)
     
-    def create_camera_tab(self, camera_num):
+    def create_camera_tab(self, camera_key, camera_num):
         """Crear tab de configuración para una cámara individual"""
         # Crear widget principal con scroll
         tab_widget = QWidget()
@@ -194,6 +227,9 @@ class MonitoringWindow(QMainWindow):
         tab_layout.setSpacing(15)
         tab_layout.setContentsMargins(10, 10, 10, 10)
         
+        # Diccionario para almacenar widgets de esta cámara
+        widgets = {}
+        
         # ==========================================
         # ESTADO DE CÁMARA
         # ==========================================
@@ -205,7 +241,7 @@ class MonitoringWindow(QMainWindow):
         enable_checkbox = QCheckBox(f"Habilitar Cámara {camera_num}")
         enable_checkbox.setChecked(True)
         enable_checkbox.setFont(QFont("Segoe UI", 10))
-        setattr(self, f'cam{camera_num}_enabled', enable_checkbox)
+        widgets['enabled'] = enable_checkbox
         
         status_layout.addWidget(enable_checkbox)
         status_layout.addStretch()
@@ -213,11 +249,11 @@ class MonitoringWindow(QMainWindow):
         tab_layout.addWidget(status_group)
         
         # ==========================================
-        # CONFIGURACIÓN RTSP - ALTURA AUMENTADA
+        # CONFIGURACIÓN RTSP
         # ==========================================
         rtsp_group = QGroupBox("🌐 Configuración de Red")
         rtsp_group.setFont(QFont("Segoe UI", 11, QFont.Bold))
-        rtsp_group.setMinimumHeight(380)  # AUMENTADO PARA QUE SE VEA TODO
+        rtsp_group.setMinimumHeight(380)
         rtsp_layout = QFormLayout()
         rtsp_layout.setSpacing(15)
         rtsp_layout.setContentsMargins(20, 20, 20, 20)
@@ -227,14 +263,14 @@ class MonitoringWindow(QMainWindow):
         ip_input.setPlaceholderText("192.168.1.10")
         ip_input.setFont(QFont("Segoe UI", 10))
         ip_input.setMinimumHeight(45)
-        setattr(self, f'cam{camera_num}_ip', ip_input)
+        widgets['ip'] = ip_input
         
         # Usuario
         user_input = QLineEdit()
         user_input.setPlaceholderText("Usuario de Camera Account")
         user_input.setFont(QFont("Segoe UI", 10))
         user_input.setMinimumHeight(45)
-        setattr(self, f'cam{camera_num}_user', user_input)
+        widgets['username'] = user_input
         
         # Contraseña
         pass_input = QLineEdit()
@@ -242,7 +278,7 @@ class MonitoringWindow(QMainWindow):
         pass_input.setFont(QFont("Segoe UI", 10))
         pass_input.setMinimumHeight(45)
         pass_input.setEchoMode(QLineEdit.Password)
-        setattr(self, f'cam{camera_num}_pass', pass_input)
+        widgets['password'] = pass_input
         
         # Checkbox mostrar contraseña
         show_pass = QCheckBox("Mostrar contraseña")
@@ -261,7 +297,7 @@ class MonitoringWindow(QMainWindow):
         ])
         stream_combo.setFont(QFont("Segoe UI", 10))
         stream_combo.setMinimumHeight(45)
-        setattr(self, f'cam{camera_num}_stream', stream_combo)
+        widgets['stream'] = stream_combo
         
         rtsp_layout.addRow("🌐 IP:", ip_input)
         rtsp_layout.addRow("👤 Usuario:", user_input)
@@ -282,10 +318,10 @@ class MonitoringWindow(QMainWindow):
         location_layout.setContentsMargins(20, 20, 20, 20)
         
         location_input = QLineEdit()
-        location_input.setPlaceholderText(f"Ej: Entrada Principal")
+        location_input.setPlaceholderText(f"Ej: Zona {camera_num}")
         location_input.setFont(QFont("Segoe UI", 10))
         location_input.setMinimumHeight(45)
-        setattr(self, f'cam{camera_num}_location', location_input)
+        widgets['location'] = location_input
         
         location_layout.addRow("Ubicación:", location_input)
         location_group.setLayout(location_layout)
@@ -308,10 +344,13 @@ class MonitoringWindow(QMainWindow):
                 background-color: #2980b9;
             }
         """)
-        test_btn.clicked.connect(lambda: self.test_camera(camera_num))
+        test_btn.clicked.connect(lambda: self.test_camera(camera_key))
         tab_layout.addWidget(test_btn)
         
         tab_layout.addStretch()
+        
+        # Guardar widgets de esta cámara
+        self.camera_widgets[camera_key] = widgets
         
         # Configurar scroll
         scroll.setWidget(content_widget)
@@ -322,58 +361,48 @@ class MonitoringWindow(QMainWindow):
     def load_camera_configs(self):
         """Cargar configuraciones de cámaras desde archivo"""
         try:
-            # Cámara 1
-            if 'camera_1' in CAMERAS_CONFIG:
-                cfg1 = CAMERAS_CONFIG['camera_1']
-                self.cam1_ip.setText(cfg1.get('ip', ''))
-                self.cam1_user.setText(cfg1.get('username', ''))
-                self.cam1_pass.setText(cfg1.get('password', ''))
-                self.cam1_location.setText(cfg1.get('location', ''))
-                self.cam1_enabled.setChecked(cfg1.get('enabled', True))
-                
-                if cfg1.get('stream') == 'stream2':
-                    self.cam1_stream.setCurrentIndex(1)
+            for camera_key, config in CAMERAS_CONFIG.items():
+                if camera_key in self.camera_widgets:
+                    widgets = self.camera_widgets[camera_key]
+                    
+                    widgets['ip'].setText(config.get('ip', ''))
+                    widgets['username'].setText(config.get('username', ''))
+                    widgets['password'].setText(config.get('password', ''))
+                    widgets['location'].setText(config.get('location', ''))
+                    widgets['enabled'].setChecked(config.get('enabled', True))
+                    
+                    if config.get('stream') == 'stream2':
+                        widgets['stream'].setCurrentIndex(1)
             
-            # Cámara 2
-            if 'camera_2' in CAMERAS_CONFIG:
-                cfg2 = CAMERAS_CONFIG['camera_2']
-                self.cam2_ip.setText(cfg2.get('ip', ''))
-                self.cam2_user.setText(cfg2.get('username', ''))
-                self.cam2_pass.setText(cfg2.get('password', ''))
-                self.cam2_location.setText(cfg2.get('location', ''))
-                self.cam2_enabled.setChecked(cfg2.get('enabled', True))
-                
-                if cfg2.get('stream') == 'stream2':
-                    self.cam2_stream.setCurrentIndex(1)
-            
-            logging.info("Configuraciones de cámaras cargadas")
+            logging.info(f"Configuraciones cargadas para {len(self.camera_widgets)} cámara(s)")
             
         except Exception as e:
             logging.error(f"Error al cargar configuraciones: {e}")
     
-    def get_camera_config(self, camera_num):
+    def get_camera_config(self, camera_key):
         """Obtener configuración de una cámara"""
-        ip = getattr(self, f'cam{camera_num}_ip').text()
-        user = getattr(self, f'cam{camera_num}_user').text()
-        password = getattr(self, f'cam{camera_num}_pass').text()
-        location = getattr(self, f'cam{camera_num}_location').text()
-        stream_idx = getattr(self, f'cam{camera_num}_stream').currentIndex()
-        enabled = getattr(self, f'cam{camera_num}_enabled').isChecked()
+        if camera_key not in self.camera_widgets:
+            return None
+        
+        widgets = self.camera_widgets[camera_key]
+        camera_num = get_camera_number(camera_key)
+        stream_idx = widgets['stream'].currentIndex()
         
         return {
-            'name': f'Cámara {camera_num}',
-            'ip': ip,
-            'username': user,
-            'password': password,
+            'name': CAMERAS_CONFIG[camera_key].get('name', f'Cámara {camera_num}'),
+            'ip': widgets['ip'].text(),
+            'username': widgets['username'].text(),
+            'password': widgets['password'].text(),
             'stream': 'stream1' if stream_idx == 0 else 'stream2',
             'port': 554,
-            'location': location,
-            'enabled': enabled
+            'location': widgets['location'].text(),
+            'enabled': widgets['enabled'].isChecked()
         }
     
-    def test_camera(self, camera_num):
+    def test_camera(self, camera_key):
         """Probar conexión de una cámara individual"""
-        config = self.get_camera_config(camera_num)
+        config = self.get_camera_config(camera_key)
+        camera_num = get_camera_number(camera_key)
         
         if not config['enabled']:
             QMessageBox.information(
@@ -399,14 +428,10 @@ class MonitoringWindow(QMainWindow):
         )
         
         try:
-            # Configurar FFmpeg
             os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
-                "rtsp_transport;udp|"
-                "fflags;nobuffer|"
-                "flags;low_delay"
+                "rtsp_transport;udp|fflags;nobuffer|flags;low_delay"
             )
             
-            # Intentar conectar
             cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)
             
             if cap.isOpened():
@@ -432,12 +457,9 @@ class MonitoringWindow(QMainWindow):
             else:
                 QMessageBox.critical(
                     self, f"❌ Error Cámara {camera_num}",
-                    "No se pudo conectar.\n\n"
-                    "Verificar:\n"
-                    "• IP correcta\n"
-                    "• Credenciales correctas\n"
-                    "• Cámara encendida\n"
-                    "• Misma red WiFi"
+                    "No se pudo conectar.\n\nVerificar:\n"
+                    "• IP correcta\n• Credenciales correctas\n"
+                    "• Cámara encendida\n• Misma red WiFi"
                 )
         
         except Exception as e:
@@ -447,18 +469,20 @@ class MonitoringWindow(QMainWindow):
             )
     
     def test_all_cameras(self):
-        """Probar todas las cámaras habilitadas"""
+        """Probar todas las cámaras configuradas"""
         results = []
         
-        for cam_num in [1, 2]:
-            config = self.get_camera_config(cam_num)
+        for camera_key in sorted(self.camera_widgets.keys(), 
+                                key=lambda x: get_camera_number(x)):
+            config = self.get_camera_config(camera_key)
+            camera_num = get_camera_number(camera_key)
             
             if not config['enabled']:
-                results.append(f"Cámara {cam_num}: ⚪ Deshabilitada")
+                results.append(f"Cámara {camera_num}: ⚪ Deshabilitada")
                 continue
             
             if not config['ip'] or not config['username'] or not config['password']:
-                results.append(f"Cámara {cam_num}: ⚠️ Campos incompletos")
+                results.append(f"Cámara {camera_num}: ⚠️ Campos incompletos")
                 continue
             
             # Probar conexión
@@ -474,15 +498,15 @@ class MonitoringWindow(QMainWindow):
                 if cap.isOpened():
                     ret, _ = cap.read()
                     if ret:
-                        results.append(f"Cámara {cam_num}: ✅ OK ({config['ip']})")
+                        results.append(f"Cámara {camera_num}: ✅ OK ({config['ip']})")
                     else:
-                        results.append(f"Cámara {cam_num}: ⚠️ Sin frames")
+                        results.append(f"Cámara {camera_num}: ⚠️ Sin frames")
                     cap.release()
                 else:
-                    results.append(f"Cámara {cam_num}: ❌ No conecta")
+                    results.append(f"Cámara {camera_num}: ❌ No conecta")
             
             except Exception as e:
-                results.append(f"Cámara {cam_num}: ❌ Error ({str(e)[:30]})")
+                results.append(f"Cámara {camera_num}: ❌ Error ({str(e)[:30]})")
         
         # Mostrar resultados
         msg = "RESULTADOS DE PRUEBA:\n\n" + "\n".join(results)
@@ -498,20 +522,22 @@ class MonitoringWindow(QMainWindow):
             )
             return
         
-        # Verificar que al menos una cámara esté habilitada y configurada
+        # Recopilar cámaras habilitadas y configuradas
         enabled_cameras = []
         
-        for cam_num in [1, 2]:
-            config = self.get_camera_config(cam_num)
+        for camera_key in sorted(self.camera_widgets.keys(), 
+                                key=lambda x: get_camera_number(x)):
+            config = self.get_camera_config(camera_key)
+            camera_num = get_camera_number(camera_key)
             
             if config['enabled']:
                 if not config['ip'] or not config['username'] or not config['password'] or not config['location']:
                     QMessageBox.warning(
-                        self, f"Cámara {cam_num} Incompleta",
-                        f"Complete todos los campos de la cámara {cam_num}."
+                        self, f"Cámara {camera_num} Incompleta",
+                        f"Complete todos los campos de la cámara {camera_num}."
                     )
                     return
-                enabled_cameras.append((cam_num, config))
+                enabled_cameras.append((camera_num, config))
         
         if not enabled_cameras:
             QMessageBox.warning(
@@ -530,7 +556,7 @@ class MonitoringWindow(QMainWindow):
         for cam_num, config in enabled_cameras:
             cameras_config['cameras'][cam_num] = config
         
-        # Emitir señal para que main.py maneje la ventana de detección
+        # Emitir señal
         logging.info(f"Emitiendo señal de inicio con {len(enabled_cameras)} cámara(s)")
         self.startMonitoringSignal.emit(cameras_config)
     
@@ -544,5 +570,5 @@ class MonitoringWindow(QMainWindow):
         )
         
         if reply == QMessageBox.Yes:
-            logging.info("Usuario cerró sesión desde MonitoringWindow")
+            logging.info("Usuario cerró sesión")
             self.close()
