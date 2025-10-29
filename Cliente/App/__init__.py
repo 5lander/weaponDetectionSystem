@@ -16,6 +16,8 @@ from .detectionWindow import DetectionWindow
 
 __all__ = [
     'Detection',
+        'DetectionTapo',        # AGREGAR
+    'DetectionWindowDual',  # AGREGAR
     'LoginWindow', 
     'MonitoringWindow',
     'DetectionWindow'

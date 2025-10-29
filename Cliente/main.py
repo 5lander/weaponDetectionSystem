@@ -7,6 +7,9 @@ from PyQt5.QtCore import QObject, QSharedMemory
 from App.loginWindowClass import LoginWindow
 from App.monitoringWindowClass import MonitoringWindow
 from App.detectionWindow import DetectionWindow
+from App.detectionWindowDual import DetectionWindowDual
+from App.detection_tapo import DetectionTapo
+from App.cameras_config import GLOBAL_CONFIG
 
 # Configurar codificación UTF-8 para la aplicación
 if sys.platform.startswith('win'):
@@ -72,7 +75,7 @@ def setup_logging():
         logging.error(f"No se pudo configurar archivo de log. Usando consola. Error: {e}")
 
 class MainApplication(QObject):
-    """Aplicación principal optimizada"""
+    """Aplicación principal optimizada con soporte multi-cámara"""
     
     def __init__(self):
         super().__init__()
@@ -81,18 +84,19 @@ class MainApplication(QObject):
         # Configurar aplicación Qt
         self.app = QApplication(sys.argv)
         self.app.setApplicationName("Weapon Detection System")
-        self.app.setApplicationVersion("2.0 Optimized")
+        self.app.setApplicationVersion("2.0 Multi-Camera")
         
         # Estado de la aplicación
         self.current_window = None
+        self.detection_threads = {}  # Almacenar threads de detección activos
         self.is_logged_in = False
         self.current_token = None
         
-        logging.info("Aplicación principal optimizada inicializada")
+        logging.info("Aplicación principal multi-cámara inicializada")
 
     def start(self):
         """Iniciar aplicación"""
-        logging.info("=== Iniciando Weapon Detection System v2.0 Optimizada ===")
+        logging.info("=== Iniciando Weapon Detection System v2.0 Multi-Cámara ===")
         self.show_login()
         return self.app.exec_()
 
@@ -116,33 +120,122 @@ class MainApplication(QObject):
 
     def show_monitoring(self, token):
         """Mostrar ventana de configuración de monitoreo"""
-        logging.info("Mostrando ventana de configuración de monitoreo")
+        logging.info("Mostrando ventana de configuración de monitoreo multi-cámara")
         self.close_current_window()
         self.current_window = MonitoringWindow(token)
         self.current_window.startMonitoringSignal.connect(self.show_detection)
-        self.current_window.logoutSignal.connect(self.logout)
         self.current_window.show()
 
-    def show_detection(self, token, location, receiver):
-        """Mostrar ventana de detección optimizada"""
-        logging.info(f"Iniciando detección optimizada - Ubicación: {location}, Receptor: {receiver}")
-        self.close_current_window()
+    def show_detection(self, cameras_config):
+        """
+        Mostrar ventana de detección multi-cámara
         
-        # Usar la ventana de detección optimizada
-        self.current_window = DetectionWindow(token, location, receiver)
-        self.current_window.closed.connect(self.on_detection_closed)
-        self.current_window.show()
-        
-        logging.info("Sistema de detección optimizado activo")
+        Args:
+            cameras_config: Dict con configuración
+                {
+                    'token': str,
+                    'receiver': str,
+                    'cameras': {
+                        cam_num: {config_dict},
+                        ...
+                    }
+                }
+        """
+        try:
+            logging.info("="*60)
+            logging.info("Iniciando sistema de detección multi-cámara")
+            logging.info("="*60)
+            
+            # Extraer datos de configuración
+            token = cameras_config.get('token')
+            receiver = cameras_config.get('receiver')
+            cameras = cameras_config.get('cameras', {})
+            
+            if not cameras:
+                logging.error("No hay cámaras configuradas")
+                from PyQt5.QtWidgets import QMessageBox
+                QMessageBox.warning(
+                    None, "Error",
+                    "No hay cámaras configuradas para iniciar."
+                )
+                return
+            
+            logging.info(f"Token: {token[:10]}...")
+            logging.info(f"Receptor: {receiver}")
+            logging.info(f"Número de cámaras: {len(cameras)}")
+            
+            # Cerrar ventana de configuración
+            self.close_current_window()
+            
+            # Crear threads de detección para cada cámara habilitada
+            self.detection_threads = {}
+            
+            for cam_num, config in cameras.items():
+                logging.info(f"")
+                logging.info(f"Configurando Cámara {cam_num}:")
+                logging.info(f"  IP: {config['ip']}")
+                logging.info(f"  Usuario: {config['username']}")
+                logging.info(f"  Stream: {config['stream']}")
+                logging.info(f"  Ubicación: {config['location']}")
+                
+                # Crear instancia de DetectionTapo
+                detection = DetectionTapo(
+                    model_path=GLOBAL_CONFIG['model_path'],
+                    token=token,
+                    location=config['location'],
+                    receiver=receiver,
+                    camera_config=config,
+                    camera_id=cam_num
+                )
+                
+                self.detection_threads[cam_num] = detection
+                logging.info(f"  Thread de detección creado para Cámara {cam_num}")
+            
+            # Crear ventana de visualización dual
+            logging.info(f"")
+            logging.info("Creando ventana de visualización dual...")
+            self.current_window = DetectionWindowDual(self.detection_threads)
+            self.current_window.show()
+            
+            logging.info("="*60)
+            logging.info(f"✅ Sistema multi-cámara activo con {len(self.detection_threads)} cámara(s)")
+            logging.info("="*60)
+            
+        except Exception as e:
+            logging.exception(f"Error crítico al iniciar detección multi-cámara: {e}")
+            from PyQt5.QtWidgets import QMessageBox
+            QMessageBox.critical(
+                None, "Error Crítico",
+                f"Error al iniciar sistema de detección:\n\n{str(e)}\n\n"
+                f"Revise el archivo de log para más detalles."
+            )
+            # Volver a monitoring si hay error
+            self.show_monitoring(self.current_token)
 
     def on_detection_closed(self):
         """Manejar cierre de ventana de detección"""
-        logging.info("Detección cerrada - Volviendo a configuración")
+        logging.info("Detección cerrada - Deteniendo threads")
+        
+        # Detener todos los threads de detección
+        for cam_num, detection in self.detection_threads.items():
+            logging.info(f"Deteniendo thread de cámara {cam_num}")
+            detection.stop()
+            detection.wait(5000)  # Esperar máximo 5 segundos
+        
+        self.detection_threads.clear()
+        logging.info("Todos los threads detenidos - Volviendo a configuración")
         self.show_monitoring(self.current_token)
 
     def logout(self):
         """Cerrar sesión"""
         logging.info("Cerrando sesión de usuario")
+        
+        # Detener threads si están activos
+        if self.detection_threads:
+            for detection in self.detection_threads.values():
+                detection.stop()
+            self.detection_threads.clear()
+        
         self.is_logged_in = False
         self.current_token = None
         self.close_current_window()
@@ -155,8 +248,12 @@ class MainApplication(QObject):
             logging.debug(f"Cerrando ventana: {window_type}")
             
             # Cerrar ventana de forma segura
-            self.current_window.close()
-            self.current_window.deleteLater()
+            try:
+                self.current_window.close()
+                self.current_window.deleteLater()
+            except:
+                pass
+            
             self.current_window = None
 
 def main():
