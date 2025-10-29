@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
 """
 monitoringWindowClass.py - VERSIÓN COMPLETAMENTE ESCALABLE
-Soporta cualquier número de cámaras dinámicamente
+Soporta cualquier número de cámaras dinámicamente con gestor integrado
 """
 
 import sys
 import os
+import json
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QLabel, QLineEdit, 
                              QPushButton, QComboBox, QCheckBox, QGroupBox,
                              QVBoxLayout, QHBoxLayout, QFormLayout, QMessageBox,
@@ -15,9 +16,13 @@ from PyQt5.QtGui import QFont, QIcon
 import logging
 import cv2
 
-# Importar configuración de cámaras
-from .cameras_config import (CAMERAS_CONFIG, GLOBAL_CONFIG, get_enabled_cameras,
-                             get_total_cameras, get_camera_number)
+# Importar el gestor de cámaras
+try:
+    from .cameraManagerWindow import CameraManagerWindow
+    CAMERA_MANAGER_AVAILABLE = True
+except ImportError:
+    CAMERA_MANAGER_AVAILABLE = False
+    logging.warning("CameraManagerWindow no disponible - usando modo legacy")
 
 
 class MonitoringWindow(QMainWindow):
@@ -35,11 +40,68 @@ class MonitoringWindow(QMainWindow):
         # Diccionarios para almacenar widgets de cada cámara
         self.camera_widgets = {}
         
+        # Cargar cámaras desde JSON
+        self.cameras = self.load_cameras_from_json()
+        
         self.setupUI()
         self.load_camera_configs()
         
-        total_cams = get_total_cameras()
+        total_cams = len(self.cameras)
         logging.info(f"MonitoringWindow inicializada - {total_cams} cámara(s) detectada(s)")
+    
+    def load_cameras_from_json(self):
+        """Cargar cámaras desde cameras.json"""
+        config_file = 'cameras.json'
+        
+        if os.path.exists(config_file):
+            try:
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    cameras = json.load(f)
+                    logging.info(f"Cargadas {len(cameras)} cámaras desde cameras.json")
+                    return cameras
+            except Exception as e:
+                logging.error(f"Error al cargar cameras.json: {e}")
+                return self.get_default_cameras()
+        
+        # Si no existe, crear con configuración por defecto
+        logging.info("cameras.json no encontrado, creando configuración por defecto")
+        default_cameras = self.get_default_cameras()
+        
+        # Guardar default
+        try:
+            with open(config_file, 'w', encoding='utf-8') as f:
+                json.dump(default_cameras, f, indent=4, ensure_ascii=False)
+            logging.info("Creado cameras.json con configuración por defecto")
+        except Exception as e:
+            logging.error(f"Error al crear cameras.json: {e}")
+        
+        return default_cameras
+    
+    def get_default_cameras(self):
+        """Obtener configuración por defecto"""
+        return {
+            'camera_1': {
+                'name': 'Cámara Principal',
+                'ip': '192.168.1.10',
+                'username': 'admin',
+                'password': 'password',
+                'stream': 'stream1',
+                'port': 554,
+                'location': 'Entrada Principal',
+                'enabled': True
+            }
+        }
+    
+    def get_total_cameras(self):
+        """Obtener número total de cámaras"""
+        return len(self.cameras)
+    
+    def get_camera_number(self, camera_key):
+        """Extraer número de cámara"""
+        try:
+            return int(camera_key.split('_')[1])
+        except:
+            return 0
     
     def setupUI(self):
         """Configurar interfaz de usuario DINÁMICA"""
@@ -56,7 +118,7 @@ class MonitoringWindow(QMainWindow):
         # ==========================================
         # ENCABEZADO DINÁMICO
         # ==========================================
-        total_cameras = get_total_cameras()
+        total_cameras = self.get_total_cameras()
         
         header_layout = QVBoxLayout()
         
@@ -65,7 +127,7 @@ class MonitoringWindow(QMainWindow):
         title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet("color: #2c3e50; margin: 10px;")
         
-        subtitle = QLabel(f"Gestiona tus {total_cameras} cámara(s)")
+        subtitle = QLabel(f"Gestiona tus {total_cameras} cámara(s) Tapo C310")
         subtitle.setFont(QFont("Segoe UI", 10))
         subtitle.setAlignment(Qt.AlignCenter)
         subtitle.setStyleSheet("color: #7f8c8d; margin-bottom: 20px;")
@@ -86,11 +148,11 @@ class MonitoringWindow(QMainWindow):
         self.camera_tabs = QTabWidget()
         self.camera_tabs.setFont(QFont("Segoe UI", 10))
         
-        # Crear tabs dinámicamente según CAMERAS_CONFIG
-        for camera_key in sorted(CAMERAS_CONFIG.keys(), 
-                                key=lambda x: get_camera_number(x)):
-            camera_num = get_camera_number(camera_key)
-            camera_name = CAMERAS_CONFIG[camera_key].get('name', f'Cámara {camera_num}')
+        # Crear tabs dinámicamente según cámaras en JSON
+        for camera_key in sorted(self.cameras.keys(), 
+                                key=lambda x: self.get_camera_number(x)):
+            camera_num = self.get_camera_number(camera_key)
+            camera_name = self.cameras[camera_key].get('name', f'Cámara {camera_num}')
             
             # Crear tab
             camera_widget = self.create_camera_tab(camera_key, camera_num)
@@ -125,7 +187,7 @@ class MonitoringWindow(QMainWindow):
         # ==========================================
         stats_layout = QHBoxLayout()
         
-        enabled_count = len([c for c in CAMERAS_CONFIG.values() if c.get('enabled', True)])
+        enabled_count = len([c for c in self.cameras.values() if c.get('enabled', True)])
         
         stats_label = QLabel(
             f"📊 Total: {total_cameras} | "
@@ -143,6 +205,26 @@ class MonitoringWindow(QMainWindow):
         # ==========================================
         button_layout = QHBoxLayout()
         button_layout.setSpacing(10)
+        
+        # Botón Gestionar Cámaras (solo si está disponible)
+        if CAMERA_MANAGER_AVAILABLE:
+            self.manageCamerasButton = QPushButton("⚙️ Gestionar Cámaras")
+            self.manageCamerasButton.setMinimumHeight(50)
+            self.manageCamerasButton.setFont(QFont("Segoe UI", 10, QFont.Bold))
+            self.manageCamerasButton.setStyleSheet("""
+                QPushButton {
+                    background-color: #9b59b6;
+                    color: white;
+                    border: none;
+                    border-radius: 5px;
+                    padding: 10px;
+                }
+                QPushButton:hover {
+                    background-color: #8e44ad;
+                }
+            """)
+            self.manageCamerasButton.clicked.connect(self.open_camera_manager)
+            button_layout.addWidget(self.manageCamerasButton)
         
         # Botón Probar Todas
         self.testAllButton = QPushButton("🔧 Probar Todas las Cámaras")
@@ -359,9 +441,9 @@ class MonitoringWindow(QMainWindow):
         return tab_widget
     
     def load_camera_configs(self):
-        """Cargar configuraciones de cámaras desde archivo"""
+        """Cargar configuraciones de cámaras desde JSON"""
         try:
-            for camera_key, config in CAMERAS_CONFIG.items():
+            for camera_key, config in self.cameras.items():
                 if camera_key in self.camera_widgets:
                     widgets = self.camera_widgets[camera_key]
                     
@@ -379,17 +461,73 @@ class MonitoringWindow(QMainWindow):
         except Exception as e:
             logging.error(f"Error al cargar configuraciones: {e}")
     
+    def open_camera_manager(self):
+        """Abrir ventana de gestión de cámaras"""
+        if not CAMERA_MANAGER_AVAILABLE:
+            QMessageBox.warning(
+                self, "No Disponible",
+                "El gestor de cámaras no está disponible.\n"
+                "Edite manualmente el archivo cameras.json"
+            )
+            return
+        
+        try:
+            manager = CameraManagerWindow(self)
+            manager.camerasUpdated.connect(self.reload_cameras)
+            manager.exec_()
+        except Exception as e:
+            logging.error(f"Error al abrir gestor de cámaras: {e}")
+            QMessageBox.critical(
+                self, "Error",
+                f"Error al abrir gestor de cámaras:\n{str(e)}"
+            )
+    
+    def reload_cameras(self):
+        """Recargar cámaras después de cambios"""
+        reply = QMessageBox.question(
+            self, 'Recargar',
+            'Las cámaras han sido actualizadas.\n'
+            '¿Desea recargar la ventana para ver los cambios?\n\n'
+            'Nota: Deberá volver a configurar el receptor de alertas.',
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes
+        )
+        
+        if reply == QMessageBox.Yes:
+            # Guardar receptor actual
+            receiver = self.receiveInput.text()
+            
+            # Recargar
+            self.cameras = self.load_cameras_from_json()
+            self.camera_widgets.clear()
+            
+            # Recrear UI
+            central = self.centralWidget()
+            if central:
+                central.deleteLater()
+            
+            self.setupUI()
+            self.load_camera_configs()
+            
+            # Restaurar receptor
+            self.receiveInput.setText(receiver)
+            
+            QMessageBox.information(
+                self, "Recargado",
+                "Ventana actualizada con las nuevas cámaras."
+            )
+    
     def get_camera_config(self, camera_key):
         """Obtener configuración de una cámara"""
         if camera_key not in self.camera_widgets:
             return None
         
         widgets = self.camera_widgets[camera_key]
-        camera_num = get_camera_number(camera_key)
+        camera_num = self.get_camera_number(camera_key)
         stream_idx = widgets['stream'].currentIndex()
         
         return {
-            'name': CAMERAS_CONFIG[camera_key].get('name', f'Cámara {camera_num}'),
+            'name': self.cameras[camera_key].get('name', f'Cámara {camera_num}'),
             'ip': widgets['ip'].text(),
             'username': widgets['username'].text(),
             'password': widgets['password'].text(),
@@ -402,7 +540,7 @@ class MonitoringWindow(QMainWindow):
     def test_camera(self, camera_key):
         """Probar conexión de una cámara individual"""
         config = self.get_camera_config(camera_key)
-        camera_num = get_camera_number(camera_key)
+        camera_num = self.get_camera_number(camera_key)
         
         if not config['enabled']:
             QMessageBox.information(
@@ -473,9 +611,9 @@ class MonitoringWindow(QMainWindow):
         results = []
         
         for camera_key in sorted(self.camera_widgets.keys(), 
-                                key=lambda x: get_camera_number(x)):
+                                key=lambda x: self.get_camera_number(x)):
             config = self.get_camera_config(camera_key)
-            camera_num = get_camera_number(camera_key)
+            camera_num = self.get_camera_number(camera_key)
             
             if not config['enabled']:
                 results.append(f"Cámara {camera_num}: ⚪ Deshabilitada")
@@ -526,9 +664,9 @@ class MonitoringWindow(QMainWindow):
         enabled_cameras = []
         
         for camera_key in sorted(self.camera_widgets.keys(), 
-                                key=lambda x: get_camera_number(x)):
+                                key=lambda x: self.get_camera_number(x)):
             config = self.get_camera_config(camera_key)
-            camera_num = get_camera_number(camera_key)
+            camera_num = self.get_camera_number(camera_key)
             
             if config['enabled']:
                 if not config['ip'] or not config['username'] or not config['password'] or not config['location']:

@@ -1,0 +1,32 @@
+{
+    "camera_1": {
+        "name": "Cámara Principal",
+        "ip": "192.168.1.10",
+        "username": "admin",
+        "password": "password",
+        "stream": "stream1",
+        "port": 554,
+        "location": "Entrada Principal",
+        "enabled": true
+    },
+    "camera_2": {
+        "name": "Camara segunda",
+        "ip": "192.168.1.11",
+        "username": "Lander",
+        "password": "lander.123",
+        "location": "Entrada secundaria",
+        "stream": "stream1",
+        "port": 554,
+        "enabled": true
+    },
+    "camera_3": {
+        "name": "camara tercera",
+        "ip": "192.168.1.13",
+        "username": "lander",
+        "password": "lannder.1234",
+        "location": "segunda entrada principal",
+        "stream": "stream1",
+        "port": 554,
+        "enabled": true
+    }
+}
