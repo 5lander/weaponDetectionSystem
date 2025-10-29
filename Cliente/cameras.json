@@ -18,15 +18,5 @@
         "stream": "stream1",
         "port": 554,
         "enabled": true
-    },
-    "camera_3": {
-        "name": "camara tercera",
-        "ip": "192.168.1.13",
-        "username": "lander",
-        "password": "lannder.1234",
-        "location": "segunda entrada principal",
-        "stream": "stream1",
-        "port": 554,
-        "enabled": true
     }
 }

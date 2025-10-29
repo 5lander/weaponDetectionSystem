@@ -13,19 +13,20 @@ import logging
 # Importar los estilos desde la carpeta Styles
 from Styles.loginStyle import LoginWindowStyles, StatusIndicatorStyles
 
-class StatusIndicator(QLabel):
-    """Indicador de estado de conexión moderno"""
-    def __init__(self):
-        super().__init__()
-        self.setFixedSize(12, 12)
-        self.status = "checking"
-        self.set_status("checking")
-        
-    def set_status(self, status):
-        """Establece el estado y aplica el estilo correspondiente"""
-        self.status = status
-        style = StatusIndicatorStyles.get_status_style(status)
-        self.setStyleSheet(style)
+# NO SE USA MÁS - COMENTADO
+# class StatusIndicator(QLabel):
+#     """Indicador de estado de conexión moderno"""
+#     def __init__(self):
+#         super().__init__()
+#         self.setFixedSize(12, 12)
+#         self.status = "checking"
+#         self.set_status("checking")
+#         
+#     def set_status(self, status):
+#         """Establece el estado y aplica el estilo correspondiente"""
+#         self.status = status
+#         style = StatusIndicatorStyles.get_status_style(status)
+#         self.setStyleSheet(style)
 
 class LoginWindow(QMainWindow):
     loginSuccessful = pyqtSignal(str)
@@ -59,8 +60,6 @@ class LoginWindow(QMainWindow):
         self.registerButton.clicked.connect(self.goToRegisterPage)
         self.loginButton.clicked.connect(self.login)
         self.setWindowTitle("Login - Weapon Detection")
-        
-        # logging.info("Ventana de login inicializada")  # DISABLED - Only errors logged
 
     def setup_resource_path(self):
         """Configura el método resource_path"""
@@ -70,55 +69,28 @@ class LoginWindow(QMainWindow):
             self.base_path = os.path.abspath(".")
     
     def resource_path(self, relative_path):
-        """Obtiene la ruta completa del recurso"""
+        """Obtiene la ruta absoluta del recurso"""
         return os.path.join(self.base_path, relative_path)
 
     def create_ui_programmatically(self):
-        """Crea la UI programáticamente si no existe el archivo .ui"""
-        # Widget central
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
+        """Crea la UI programáticamente si no se encuentra el archivo .ui"""
+        logging.info("Creando UI programáticamente como fallback")
         
-        # Configurar ventana
-        self.setFixedSize(400, 450)
-        self.setMinimumSize(400, 450)
-        self.setMaximumSize(400, 450)
-        
-        # Crear componentes
-        self.labelTitle = QLabel("Weapon Detection", central_widget)
-        self.labelTitle.setGeometry(30, 65, 340, 45)
-        self.labelTitle.setAlignment(Qt.AlignCenter)
-        
-        self.labelUsername = QLabel("Username:", central_widget)
-        self.labelPassword = QLabel("Password:", central_widget)
-        
-        from PyQt5.QtWidgets import QLineEdit, QPushButton
-        
-        self.usernameInput = QLineEdit(central_widget)
-        self.usernameInput.setPlaceholderText("Enter your username")
-        
-        self.passwordInput = QLineEdit(central_widget)
-        self.passwordInput.setPlaceholderText("Enter your password")
+        # Crear widgets básicos
+        self.labelTitle = QLabel("Weapon Detection System", self)
+        self.labelUsername = QLabel("Username", self)
+        self.usernameInput = QLineEdit(self)
+        self.labelPassword = QLabel("Password", self)
+        self.passwordInput = QLineEdit(self)
         self.passwordInput.setEchoMode(QLineEdit.Password)
-        
-        self.loginButton = QPushButton("Login", central_widget)
-        self.registerButton = QPushButton("Register", central_widget)
-        
-        # Configurar fuentes
-        font = QFont("Segoe UI")
-        self.setFont(font)
-        
-        title_font = QFont("Segoe UI", 18, QFont.Bold)
-        self.labelTitle.setFont(title_font)
+        self.loginButton = QPushButton("Login", self)
+        self.registerButton = QPushButton("Register", self)
 
     def customize_title_bar(self):
-        """Personaliza la barra de título de la ventana"""
-        try:
-            icon_path = self.resource_path('UI/icon.ico')
-            if os.path.exists(icon_path):
-                self.setWindowIcon(QIcon(icon_path))
-        except:
-            pass
+        """Personaliza la barra de título"""
+        icon_path = self.resource_path('Assets/icon.png')
+        if os.path.exists(icon_path):
+            self.setWindowIcon(QIcon(icon_path))
 
     def fix_component_positioning(self):
         """Arregla el posicionamiento y dimensiones de los componentes"""
@@ -144,7 +116,7 @@ class LoginWindow(QMainWindow):
     def setup_modern_enhancements(self):
         """Aplica mejoras modernas manteniendo la funcionalidad original"""
         self.apply_modern_styling()
-        self.add_status_indicator()
+        # self.add_status_indicator()  # <<<< COMENTADO - YA NO SE MUESTRA
         self.add_progress_indicator() 
         self.setup_animations()
         self.enhance_form_validation()
@@ -161,25 +133,26 @@ class LoginWindow(QMainWindow):
         self.labelUsername.setStyleSheet(LoginWindowStyles.LABEL_STYLE)
         self.labelPassword.setStyleSheet(LoginWindowStyles.LABEL_STYLE)
 
-    def add_status_indicator(self):
-        """Añade indicador de estado de conexión bien posicionado"""
-        # Crear frame para el indicador de estado
-        self.status_frame = QFrame(self)
-        self.status_frame.setGeometry(20, 15, 180, 35)
-        self.status_frame.setStyleSheet(LoginWindowStyles.STATUS_FRAME)
-        
-        # Indicador visual
-        self.status_indicator = StatusIndicator()
-        self.status_indicator.setParent(self.status_frame)
-        self.status_indicator.move(12, 11)
-        
-        # Texto de estado
-        self.status_label = QLabel("Checking connection...", self.status_frame)
-        self.status_label.setGeometry(32, 7, 140, 21)
-        self.status_label.setStyleSheet(LoginWindowStyles.STATUS_LABEL)
-        
-        # Iniciar verificación de estado
-        self.check_server_status()
+    # MÉTODO COMENTADO - YA NO SE USA
+    # def add_status_indicator(self):
+    #     """Añade indicador de estado de conexión bien posicionado"""
+    #     # Crear frame para el indicador de estado
+    #     self.status_frame = QFrame(self)
+    #     self.status_frame.setGeometry(20, 15, 180, 35)
+    #     self.status_frame.setStyleSheet(LoginWindowStyles.STATUS_FRAME)
+    #     
+    #     # Indicador visual
+    #     self.status_indicator = StatusIndicator()
+    #     self.status_indicator.setParent(self.status_frame)
+    #     self.status_indicator.move(12, 11)
+    #     
+    #     # Texto de estado
+    #     self.status_label = QLabel("Checking connection...", self.status_frame)
+    #     self.status_label.setGeometry(32, 7, 140, 21)
+    #     self.status_label.setStyleSheet(LoginWindowStyles.STATUS_LABEL)
+    #     
+    #     # Iniciar verificación de estado
+    #     self.check_server_status()
         
     def add_progress_indicator(self):
         """Añade barra de progreso bien posicionada"""
@@ -226,22 +199,23 @@ class LoginWindow(QMainWindow):
             # Restaurar estilos normales
             self.apply_modern_styling()
             
-    def check_server_status(self):
-        """Verifica el estado del servidor"""
-        self.status_indicator.set_status("checking")
-        self.status_label.setText("Checking server...")
-        
-        try:
-            response = requests.get('https://weapondetectionsystem.onrender.com/', timeout=5)
-            if response.status_code == 200:
-                self.status_indicator.set_status("connected")
-                self.status_label.setText("Server online")
-            else:
-                self.status_indicator.set_status("error")
-                self.status_label.setText("Server error")
-        except:
-            self.status_indicator.set_status("disconnected")
-            self.status_label.setText("Server offline")
+    # MÉTODO COMENTADO - YA NO SE USA
+    # def check_server_status(self):
+    #     """Verifica el estado del servidor"""
+    #     self.status_indicator.set_status("checking")
+    #     self.status_label.setText("Checking server...")
+    #     
+    #     try:
+    #         response = requests.get('https://weapondetectionsystem.onrender.com/', timeout=5)
+    #         if response.status_code == 200:
+    #             self.status_indicator.set_status("connected")
+    #             self.status_label.setText("Server online")
+    #         else:
+    #             self.status_indicator.set_status("error")
+    #             self.status_label.setText("Server error")
+    #     except:
+    #         self.status_indicator.set_status("disconnected")
+    #         self.status_label.setText("Server offline")
 
     def login(self):
         """Método de login original con mejoras visuales"""
@@ -258,9 +232,6 @@ class LoginWindow(QMainWindow):
         try:
             url = 'https://weaponnotificationserver.onrender.com/api/get_auth_token/'
             response = requests.post(url, data={'username': username, 'password': password}, timeout=10)
-            
-            # logging.debug(f"Código de estado de la respuesta: {response.status_code}")  # DISABLED - Only errors logged
-            # logging.debug(f"Contenido de la respuesta: {response.text}")  # DISABLED - Only errors logged
 
             if response.ok:
                 try:
@@ -269,7 +240,6 @@ class LoginWindow(QMainWindow):
                         self.login_success_animation()
                         self.loginSuccessful.emit(json_response['token'])
                         self.close()
-                        # logging.info("Inicio de sesión exitoso. Token recibido.")  # DISABLED - Only errors logged
                     else:
                         self.stop_login_animation()
                         self.showErrorMessage("Error de inicio de sesión", "La respuesta del servidor no contiene un token.")
@@ -288,8 +258,9 @@ class LoginWindow(QMainWindow):
             self.showErrorMessage("Tiempo de espera agotado", "El servidor no respondió a tiempo. Por favor, inténtelo de nuevo más tarde.")
         except requests.exceptions.ConnectionError:
             self.stop_login_animation() 
-            self.status_indicator.set_status("error")
-            self.status_label.setText("Connection failed")
+            # LÍNEAS COMENTADAS - YA NO ACTUALIZAN EL INDICADOR DE ESTADO
+            # self.status_indicator.set_status("error")
+            # self.status_label.setText("Connection failed")
             self.showErrorMessage("Error de conexión", "No se pudo conectar al servidor. Verifique su conexión a internet y que el servidor esté en funcionamiento.")
         except Exception as e:
             self.stop_login_animation()
@@ -376,7 +347,6 @@ class LoginWindow(QMainWindow):
         error_box.setStyleSheet(style)
         
         error_box.exec_()
-        # logging.warning(f"Error mostrado al usuario: {title} - {message}")  # DISABLED - Only errors logged
 
     def goToRegisterPage(self):
         try:
@@ -388,5 +358,4 @@ class LoginWindow(QMainWindow):
             logging.error(error_message)
 
     def closeEvent(self, event):
-        # logging.info("Ventana de login cerrada")  # DISABLED - Only errors logged
         super().closeEvent(event)
