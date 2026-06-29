@@ -179,7 +179,7 @@ class MainApplication(QObject):
                 
                 # Crear instancia de DetectionTapo
                 detection = DetectionTapo(
-                    model_path='model/last.pt',
+                    model_path=GLOBAL_CONFIG['model_path'],
                     token=token,
                     location=config['location'],
                     receiver=receiver,
@@ -194,6 +194,9 @@ class MainApplication(QObject):
             logging.info(f"")
             logging.info("Creando ventana de visualización dual...")
             self.current_window = DetectionWindowDual(self.detection_threads)
+            # Al volver/detener desde la ventana de detección, regresar al menú
+            # de configuración (en vez de cerrar la app o la sesión).
+            self.current_window.closed.connect(self.on_detection_closed)
             self.current_window.show()
             
             logging.info("="*60)
