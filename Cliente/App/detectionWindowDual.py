@@ -36,6 +36,9 @@ class DetectionWindowDual(QMainWindow):
         
         self.detection_threads = detection_threads
         self.num_cameras = len(detection_threads)
+
+        # Evita preguntar dos veces al cerrar (botón -> close() -> closeEvent)
+        self._is_closing = False
         
         # Widgets para cada cámara
         self.camera_labels = {}
@@ -81,20 +84,23 @@ class DetectionWindowDual(QMainWindow):
             return rows, cols
     
     def calculate_camera_size(self):
-        """Calcular tamaño de cada cámara según el grid"""
-        # Tamaños base según número de cámaras
+        """Calcular tamaño de cada cámara según el grid.
+
+        Tamaños ajustados para que todas las cámaras quepan en pantalla
+        (la ventana se abre maximizada y el grid tiene scroll para el resto).
+        """
         if self.num_cameras == 1:
-            return 960, 720
+            return 900, 640
         elif self.num_cameras == 2:
-            return 640, 480
+            return 620, 460
         elif self.num_cameras <= 4:
-            return 560, 420
+            return 460, 345
         elif self.num_cameras <= 6:
-            return 480, 360
+            return 400, 300
         elif self.num_cameras <= 9:
-            return 420, 315
+            return 320, 240
         else:
-            return 380, 285
+            return 280, 210
     
     def setupUI(self):
         """Configurar interfaz de usuario DINÁMICA"""
@@ -206,6 +212,23 @@ class DetectionWindowDual(QMainWindow):
         button_layout = QHBoxLayout()
         button_layout.setSpacing(10)
         
+        # Botón Volver al Menú (regresa a la configuración de cámaras)
+        self.backButton = QPushButton("⬅ Volver al Menú")
+        self.backButton.setMinimumHeight(45)
+        self.backButton.setFont(QFont("Segoe UI", 10, QFont.Bold))
+        self.backButton.setStyleSheet("""
+            QPushButton {
+                background-color: #3498db;
+                color: white;
+                border: none;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #2980b9;
+            }
+        """)
+        self.backButton.clicked.connect(self.go_back)
+
         # Botón Pausar/Reanudar
         self.pauseButton = QPushButton("⏸ Pausar Sistema")
         self.pauseButton.setMinimumHeight(45)
@@ -240,6 +263,7 @@ class DetectionWindowDual(QMainWindow):
         """)
         self.stopButton.clicked.connect(self.stop_system)
         
+        button_layout.addWidget(self.backButton)
         button_layout.addStretch()
         button_layout.addWidget(self.pauseButton)
         button_layout.addWidget(self.stopButton)
@@ -247,17 +271,16 @@ class DetectionWindowDual(QMainWindow):
         main_layout.addLayout(button_layout)
         
         # ==========================================
-        # CONFIGURACIÓN DE VENTANA (TAMAÑO DINÁMICO)
+        # CONFIGURACIÓN DE VENTANA
         # ==========================================
-        # Calcular tamaño de ventana según grid
-        window_width = min(1920, (cam_width + 20) * self.grid_cols + 60)
-        window_height = min(1080, (cam_height + 100) * min(self.grid_rows, 3) + 300)
-        
         self.setWindowTitle(f"Monitoreo Activo - {self.num_cameras} Cámara(s)")
-        self.setMinimumSize(window_width, window_height)
-        
-        # Centrar en pantalla
-        self.center_window()
+
+        # Tamaño mínimo modesto y apertura MAXIMIZADA, para que TODAS las
+        # cámaras sean visibles (las que no quepan quedan accesibles con el
+        # scroll del grid). Antes la ventana se hacía más grande que la
+        # pantalla y las cámaras de la última fila quedaban fuera de vista.
+        self.setMinimumSize(900, 600)
+        self.setWindowState(Qt.WindowMaximized)
     
     def create_camera_widget(self, camera_id, width, height):
         """Crear widget para una cámara individual"""
@@ -435,28 +458,44 @@ class DetectionWindowDual(QMainWindow):
             self.system_status.setText("● SISTEMA ACTIVO")
             self.system_status.setStyleSheet("color: #27ae60;")
     
-    def stop_system(self):
-        """Detener sistema completo"""
+    def _shutdown_and_emit(self):
+        """Detener métricas y notificar para volver al menú (una sola vez).
+
+        El detener los threads de detección y el regreso a la ventana de
+        configuración los maneja main.py en on_detection_closed (conectado a
+        la señal `closed`).
+        """
+        if self._is_closing:
+            return
+        self._is_closing = True
+        self.metrics_timer.stop()
+        self.closed.emit()
+
+    def go_back(self):
+        """Volver al menú de configuración (detiene el monitoreo actual)"""
         reply = QMessageBox.question(
-            self, 'Confirmar',
-            '¿Desea detener el sistema de monitoreo?',
+            self, 'Volver al Menú',
+            '¿Volver al menú de configuración?\n\nSe detendrá el monitoreo actual.',
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
-        
+
+        if reply == QMessageBox.Yes:
+            logging.info("Volviendo al menú de configuración...")
+            self._shutdown_and_emit()
+
+    def stop_system(self):
+        """Detener el monitoreo y volver al menú de configuración"""
+        reply = QMessageBox.question(
+            self, 'Detener Monitoreo',
+            '¿Desea detener el monitoreo y volver al menú de configuración?',
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+
         if reply == QMessageBox.Yes:
             logging.info("Deteniendo sistema...")
-            
-            # Detener todos los threads
-            for detection in self.detection_threads.values():
-                detection.stop()
-                detection.wait(5000)
-            
-            self.metrics_timer.stop()
-            self.closed.emit()
-            self.close()
-            
-            logging.info("Sistema detenido correctamente")
+            self._shutdown_and_emit()
     
     def center_window(self):
         """Centrar ventana en pantalla"""
@@ -469,23 +508,22 @@ class DetectionWindowDual(QMainWindow):
         )
     
     def closeEvent(self, event):
-        """Manejar cierre de ventana"""
+        """Manejar cierre de ventana (botón X)"""
+        # Si ya estamos cerrando desde un botón, no volver a preguntar
+        if self._is_closing:
+            event.accept()
+            return
+
         reply = QMessageBox.question(
-            self, 'Confirmar Cierre',
-            '¿Está seguro de cerrar el sistema?',
+            self, 'Cerrar Monitoreo',
+            '¿Detener el monitoreo y volver al menú de configuración?',
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
-        
+
         if reply == QMessageBox.Yes:
-            logging.info("Cerrando sistema - Usuario confirmó")
-            
-            for detection in self.detection_threads.values():
-                detection.stop()
-            
-            self.metrics_timer.stop()
-            self.closed.emit()
-            
+            logging.info("Cerrando monitoreo - Usuario confirmó")
+            self._shutdown_and_emit()
             event.accept()
         else:
             event.ignore()

@@ -172,13 +172,13 @@ class MonitoringWindow(QMainWindow):
         global_group.setFont(QFont("Segoe UI", 11, QFont.Bold))
         global_layout = QFormLayout()
         
-        # Contacto para notificaciones
+        # Contacto para notificaciones (solo correo electrónico)
         self.receiveInput = QLineEdit()
-        self.receiveInput.setPlaceholderText("correo@ejemplo.com o +593987654321")
+        self.receiveInput.setPlaceholderText("correo@ejemplo.com")
         self.receiveInput.setFont(QFont("Segoe UI", 10))
         self.receiveInput.setMinimumHeight(40)
-        
-        global_layout.addRow("📧 Receptor de Alertas:", self.receiveInput)
+
+        global_layout.addRow("📧 Correo para Alertas:", self.receiveInput)
         global_group.setLayout(global_layout)
         main_layout.addWidget(global_group)
         
@@ -650,13 +650,28 @@ class MonitoringWindow(QMainWindow):
         msg = "RESULTADOS DE PRUEBA:\n\n" + "\n".join(results)
         QMessageBox.information(self, "Prueba de Cámaras", msg)
     
+    def _is_valid_email(self, text):
+        """Validación simple de correo electrónico"""
+        text = text.strip()
+        if '@' not in text:
+            return False
+        local, _, domain = text.partition('@')
+        return bool(local) and '.' in domain and not domain.startswith('.') and not domain.endswith('.')
+
     def start_monitoring_system(self):
         """Iniciar sistema de monitoreo multi-cámara"""
-        # Validar receptor
-        if not self.receiveInput.text():
+        # Validar correo de alertas (solo correo electrónico)
+        receiver = self.receiveInput.text().strip()
+        if not receiver:
             QMessageBox.warning(
                 self, "Campo Requerido",
-                "Ingrese un receptor para las alertas."
+                "Ingrese un correo electrónico para recibir las alertas."
+            )
+            return
+        if not self._is_valid_email(receiver):
+            QMessageBox.warning(
+                self, "Correo Inválido",
+                "Ingrese un correo electrónico válido.\n\nEjemplo: nombre@dominio.com"
             )
             return
         
@@ -686,7 +701,7 @@ class MonitoringWindow(QMainWindow):
         
         # Preparar configuración para enviar a main.py
         cameras_config = {
-            'receiver': self.receiveInput.text(),
+            'receiver': receiver,
             'token': self.token,
             'cameras': {}
         }
