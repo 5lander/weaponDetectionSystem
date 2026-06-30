@@ -2,12 +2,28 @@
 import sys
 import os
 import logging
+import subprocess
+
+# En Windows, evitar que los subprocesos (p.ej. nvidia-smi, que GPUtil invoca
+# cada pocos segundos durante la deteccion) abran ventanas de consola que parpadean.
+# Se envuelve subprocess.Popen para forzar CREATE_NO_WINDOW en toda la app.
+if sys.platform.startswith('win'):
+    _CREATE_NO_WINDOW = getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000)
+    _orig_popen_init = subprocess.Popen.__init__
+
+    def _popen_no_window(self, *args, **kwargs):
+        kwargs['creationflags'] = kwargs.get('creationflags', 0) | _CREATE_NO_WINDOW
+        _orig_popen_init(self, *args, **kwargs)
+
+    subprocess.Popen.__init__ = _popen_no_window
+
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtCore import QObject, QSharedMemory
 from App.loginWindowClass import LoginWindow
 from App.monitoringWindowClass import MonitoringWindow
 from App.detectionWindowDual import DetectionWindowDual
 from App.detection_tapo import DetectionTapo
+from App.inference_engine import InferenceEngine
 from App.cameras_config import GLOBAL_CONFIG
 
 # Configurar codificación UTF-8 para la aplicación
@@ -88,6 +104,7 @@ class MainApplication(QObject):
         # Estado de la aplicación
         self.current_window = None
         self.detection_threads = {}  # Almacenar threads de detección activos
+        self.engine = None  # Motor de inferencia COMPARTIDO (1 modelo para todas las cámaras)
         self.is_logged_in = False
         self.current_token = None
         
@@ -165,10 +182,33 @@ class MainApplication(QObject):
             
             # Cerrar ventana de configuración
             self.close_current_window()
-            
+
+            # Crear UN motor de inferencia COMPARTIDO (carga el modelo UNA sola vez
+            # para todas las cámaras, en vez de una copia por cámara).
+            self.engine = InferenceEngine(
+                GLOBAL_CONFIG['model_path'],
+                conf=GLOBAL_CONFIG.get('confidence_threshold', 0.5),
+                iou=0.45,
+                max_det=GLOBAL_CONFIG.get('max_detections', 10),
+                num_workers=GLOBAL_CONFIG.get('inference_workers', 1),
+            )
+            try:
+                self.engine.start()  # ÚNICA carga del modelo
+            except Exception as e:
+                logging.exception(f"Error al cargar el modelo de inferencia: {e}")
+                from PyQt5.QtWidgets import QMessageBox
+                QMessageBox.critical(
+                    None, "Error de Modelo",
+                    f"No se pudo cargar el modelo de detección:\n\n{str(e)}\n\n"
+                    f"Revise el archivo de log para más detalles."
+                )
+                self._teardown_engine()
+                self.show_monitoring(self.current_token)
+                return
+
             # Crear threads de detección para cada cámara habilitada
             self.detection_threads = {}
-            
+
             for cam_num, config in cameras.items():
                 logging.info(f"")
                 logging.info(f"Configurando Cámara {cam_num}:")
@@ -176,17 +216,18 @@ class MainApplication(QObject):
                 logging.info(f"  Usuario: {config['username']}")
                 logging.info(f"  Stream: {config['stream']}")
                 logging.info(f"  Ubicación: {config['location']}")
-                
-                # Crear instancia de DetectionTapo
+
+                # Crear instancia de DetectionTapo (sin modelo propio: usa el engine compartido)
                 detection = DetectionTapo(
                     model_path=GLOBAL_CONFIG['model_path'],
                     token=token,
                     location=config['location'],
                     receiver=receiver,
                     camera_config=config,
-                    camera_id=cam_num
+                    camera_id=cam_num,
+                    engine=self.engine
                 )
-                
+
                 self.detection_threads[cam_num] = detection
                 logging.info(f"  Thread de detección creado para Cámara {cam_num}")
             
@@ -205,6 +246,17 @@ class MainApplication(QObject):
             
         except Exception as e:
             logging.exception(f"Error crítico al iniciar detección multi-cámara: {e}")
+            # Limpiar cámaras ya creadas y el engine para NO dejar fugas
+            # (modelo en RAM/VRAM + worker huérfano) si falla a mitad del arranque.
+            for detection in self.detection_threads.values():
+                try:
+                    detection.stop()
+                    detection.wait(3000)
+                except Exception:
+                    pass
+            self.detection_threads.clear()
+            self._teardown_engine()
+
             from PyQt5.QtWidgets import QMessageBox
             QMessageBox.critical(
                 None, "Error Crítico",
@@ -214,17 +266,35 @@ class MainApplication(QObject):
             # Volver a monitoring si hay error
             self.show_monitoring(self.current_token)
 
+    def _teardown_engine(self):
+        """Detener y liberar el motor de inferencia compartido de forma segura.
+
+        Centraliza el apagado para que NINGÚN camino (cierre normal, logout o
+        error a mitad del arranque) deje el engine vivo y huérfano (modelo en
+        RAM/VRAM + worker daemon colgado).
+        """
+        if self.engine:
+            try:
+                self.engine.stop()
+            except Exception as e:
+                logging.error(f"Error al detener el motor de inferencia: {e}")
+            self.engine = None
+
     def on_detection_closed(self):
         """Manejar cierre de ventana de detección"""
         logging.info("Detección cerrada - Deteniendo threads")
         
-        # Detener todos los threads de detección
+        # Detener todos los threads de detección PRIMERO
         for cam_num, detection in self.detection_threads.items():
             logging.info(f"Deteniendo thread de cámara {cam_num}")
             detection.stop()
             detection.wait(5000)  # Esperar máximo 5 segundos
-        
+
         self.detection_threads.clear()
+
+        # Detener el motor de inferencia DESPUÉS de las cámaras (apagado ordenado)
+        self._teardown_engine()
+
         logging.info("Todos los threads detenidos - Volviendo a configuración")
         self.show_monitoring(self.current_token)
 
@@ -236,8 +306,12 @@ class MainApplication(QObject):
         if self.detection_threads:
             for detection in self.detection_threads.values():
                 detection.stop()
+                detection.wait(5000)
             self.detection_threads.clear()
-        
+
+        # Detener el motor de inferencia compartido
+        self._teardown_engine()
+
         self.is_logged_in = False
         self.current_token = None
         self.close_current_window()

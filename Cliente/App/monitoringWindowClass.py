@@ -16,6 +16,9 @@ from PyQt5.QtGui import QFont, QIcon
 import logging
 import cv2
 
+from .rtsp_fields import RtspFieldsGroup
+from . import rtsp_profiles as profiles
+
 # Importar el gestor de cámaras
 try:
     from .cameraManagerWindow import CameraManagerWindow
@@ -331,63 +334,10 @@ class MonitoringWindow(QMainWindow):
         tab_layout.addWidget(status_group)
         
         # ==========================================
-        # CONFIGURACIÓN RTSP
+        # CONFIGURACIÓN RTSP (marca, IP, puerto, usuario, contraseña, canal, calidad, ruta)
         # ==========================================
-        rtsp_group = QGroupBox("🌐 Configuración de Red")
-        rtsp_group.setFont(QFont("Segoe UI", 11, QFont.Bold))
-        rtsp_group.setMinimumHeight(380)
-        rtsp_layout = QFormLayout()
-        rtsp_layout.setSpacing(15)
-        rtsp_layout.setContentsMargins(20, 20, 20, 20)
-        
-        # IP
-        ip_input = QLineEdit()
-        ip_input.setPlaceholderText("192.168.1.10")
-        ip_input.setFont(QFont("Segoe UI", 10))
-        ip_input.setMinimumHeight(45)
-        widgets['ip'] = ip_input
-        
-        # Usuario
-        user_input = QLineEdit()
-        user_input.setPlaceholderText("Usuario de Camera Account")
-        user_input.setFont(QFont("Segoe UI", 10))
-        user_input.setMinimumHeight(45)
-        widgets['username'] = user_input
-        
-        # Contraseña
-        pass_input = QLineEdit()
-        pass_input.setPlaceholderText("Contraseña")
-        pass_input.setFont(QFont("Segoe UI", 10))
-        pass_input.setMinimumHeight(45)
-        pass_input.setEchoMode(QLineEdit.Password)
-        widgets['password'] = pass_input
-        
-        # Checkbox mostrar contraseña
-        show_pass = QCheckBox("Mostrar contraseña")
-        show_pass.setFont(QFont("Segoe UI", 9))
-        show_pass.stateChanged.connect(
-            lambda state: pass_input.setEchoMode(
-                QLineEdit.Normal if state == Qt.Checked else QLineEdit.Password
-            )
-        )
-        
-        # Calidad de stream
-        stream_combo = QComboBox()
-        stream_combo.addItems([
-            "Alta Calidad (stream1) - 2304x1296",
-            "Baja Calidad (stream2) - 640x360"
-        ])
-        stream_combo.setFont(QFont("Segoe UI", 10))
-        stream_combo.setMinimumHeight(45)
-        widgets['stream'] = stream_combo
-        
-        rtsp_layout.addRow("🌐 IP:", ip_input)
-        rtsp_layout.addRow("👤 Usuario:", user_input)
-        rtsp_layout.addRow("🔒 Contraseña:", pass_input)
-        rtsp_layout.addRow("", show_pass)
-        rtsp_layout.addRow("📺 Calidad:", stream_combo)
-        
-        rtsp_group.setLayout(rtsp_layout)
+        rtsp_group = RtspFieldsGroup(title="🌐 Conexión de la cámara")
+        widgets['fields'] = rtsp_group
         tab_layout.addWidget(rtsp_group)
         
         # ==========================================
@@ -446,18 +396,13 @@ class MonitoringWindow(QMainWindow):
             for camera_key, config in self.cameras.items():
                 if camera_key in self.camera_widgets:
                     widgets = self.camera_widgets[camera_key]
-                    
-                    widgets['ip'].setText(config.get('ip', ''))
-                    widgets['username'].setText(config.get('username', ''))
-                    widgets['password'].setText(config.get('password', ''))
+
+                    widgets['fields'].set_config(config)
                     widgets['location'].setText(config.get('location', ''))
                     widgets['enabled'].setChecked(config.get('enabled', True))
-                    
-                    if config.get('stream') == 'stream2':
-                        widgets['stream'].setCurrentIndex(1)
-            
+
             logging.info(f"Configuraciones cargadas para {len(self.camera_widgets)} cámara(s)")
-            
+
         except Exception as e:
             logging.error(f"Error al cargar configuraciones: {e}")
     
@@ -518,24 +463,20 @@ class MonitoringWindow(QMainWindow):
             )
     
     def get_camera_config(self, camera_key):
-        """Obtener configuración de una cámara"""
+        """Obtener configuración de una cámara (identificación + conexión RTSP por marca)."""
         if camera_key not in self.camera_widgets:
             return None
-        
+
         widgets = self.camera_widgets[camera_key]
         camera_num = self.get_camera_number(camera_key)
-        stream_idx = widgets['stream'].currentIndex()
-        
-        return {
+
+        config = {
             'name': self.cameras[camera_key].get('name', f'Cámara {camera_num}'),
-            'ip': widgets['ip'].text(),
-            'username': widgets['username'].text(),
-            'password': widgets['password'].text(),
-            'stream': 'stream1' if stream_idx == 0 else 'stream2',
-            'port': 554,
             'location': widgets['location'].text(),
-            'enabled': widgets['enabled'].isChecked()
+            'enabled': widgets['enabled'].isChecked(),
         }
+        config.update(widgets['fields'].get_config())
+        return config
     
     def test_camera(self, camera_key):
         """Probar conexión de una cámara individual"""
@@ -549,17 +490,22 @@ class MonitoringWindow(QMainWindow):
             )
             return
         
-        # Validar campos
-        if not config['ip'] or not config['username'] or not config['password']:
+        # Validar campos (según la marca)
+        brand = config.get('brand', 'tapo')
+        if profiles.brand_uses_custom_path(brand):
+            valid = bool((config.get('path') or '').strip())
+        else:
+            valid = bool(config['ip'] and config['username'] and config['password'])
+        if not valid:
             QMessageBox.warning(
                 self, "Campos Incompletos",
-                f"Complete todos los campos de la cámara {camera_num}."
+                f"Complete los datos de conexión de la cámara {camera_num}."
             )
             return
-        
-        # Construir URL RTSP
-        rtsp_url = f"rtsp://{config['username']}:{config['password']}@{config['ip']}:554/{config['stream']}"
-        
+
+        # Construir URL RTSP según la marca
+        rtsp_url = profiles.build_rtsp_url(config)
+
         QMessageBox.information(
             self, "Probando Conexión",
             f"Conectando a cámara {camera_num}...\nEsto puede tardar unos segundos."
@@ -583,7 +529,7 @@ class MonitoringWindow(QMainWindow):
                         f"¡Conexión exitosa!\n\n"
                         f"Resolución: {width}x{height}\n"
                         f"IP: {config['ip']}\n"
-                        f"Stream: {config['stream']}"
+                        f"Marca: {profiles.brand_label(config.get('brand', 'tapo'))}"
                     )
                 else:
                     QMessageBox.warning(
@@ -619,13 +565,13 @@ class MonitoringWindow(QMainWindow):
                 results.append(f"Cámara {camera_num}: ⚪ Deshabilitada")
                 continue
             
-            if not config['ip'] or not config['username'] or not config['password']:
+            if not self._camera_config_is_complete(config):
                 results.append(f"Cámara {camera_num}: ⚠️ Campos incompletos")
                 continue
-            
+
             # Probar conexión
-            rtsp_url = f"rtsp://{config['username']}:{config['password']}@{config['ip']}:554/{config['stream']}"
-            
+            rtsp_url = profiles.build_rtsp_url(config)
+
             try:
                 os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
                     "rtsp_transport;udp|fflags;nobuffer|flags;low_delay"
@@ -658,6 +604,21 @@ class MonitoringWindow(QMainWindow):
         local, _, domain = text.partition('@')
         return bool(local) and '.' in domain and not domain.startswith('.') and not domain.endswith('.')
 
+    def _camera_config_is_complete(self, config):
+        """Validar que una cámara tenga los datos necesarios según su marca."""
+        if not config.get('location'):
+            return False
+        brand = config.get('brand', 'tapo')
+        if profiles.brand_uses_custom_path(brand):
+            path = (config.get('path') or '').strip()
+            if not path:
+                return False
+            # Si pegó la URL rtsp:// completa, no exige IP/credenciales aparte.
+            if path.lower().startswith('rtsp://'):
+                return True
+            return bool(config.get('ip'))
+        return bool(config.get('ip') and config.get('username') and config.get('password'))
+
     def start_monitoring_system(self):
         """Iniciar sistema de monitoreo multi-cámara"""
         # Validar correo de alertas (solo correo electrónico)
@@ -684,7 +645,7 @@ class MonitoringWindow(QMainWindow):
             camera_num = self.get_camera_number(camera_key)
             
             if config['enabled']:
-                if not config['ip'] or not config['username'] or not config['password'] or not config['location']:
+                if not self._camera_config_is_complete(config):
                     QMessageBox.warning(
                         self, f"Cámara {camera_num} Incompleta",
                         f"Complete todos los campos de la cámara {camera_num}."

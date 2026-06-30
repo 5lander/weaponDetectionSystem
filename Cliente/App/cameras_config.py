@@ -26,6 +26,10 @@ GLOBAL_CONFIG = {
     'use_gpu': True,
     'max_detections': 10,
     'confidence_threshold': 0.5,
+
+    # Motor de inferencia compartido: nº de workers de inferencia (1 modelo en RAM
+    # para todas las cámaras). Default 1; subir a 2 solo si la GPU lo permite.
+    'inference_workers': 1,
     
     # Recuperación de errores
     'max_reconnect_attempts': 3,

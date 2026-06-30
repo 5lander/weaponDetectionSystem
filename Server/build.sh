@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
-# Render build script - Weapon Detection System (Server)
-# Se ejecuta en cada deploy dentro de la red de Render, donde la BD sí conecta.
+# Render build script - Weapon Detection System
+# Se ejecuta en cada deploy dentro de la red de Render, donde la BD si conecta.
+# Invocar como Build Command:  bash Server/build.sh
 set -o errexit
 
-pip install -r requirements.txt
+# Entra a la carpeta Server sin importar desde donde se invoque
+cd "$(dirname "$0")"
 
-# Crea las tablas en la base de datos PostgreSQL de Render (auth_user, etc.)
-python manage.py migrate --no-input
+# --only-binary=pillow evita compilar Pillow desde fuente en Render
+pip install --only-binary=pillow -r requirements.txt
 
-# Archivos estáticos
-python manage.py collectstatic --no-input
+# Crea las tablas en la BD PostgreSQL de Render (auth_user, etc.)
+python manage.py migrate --noinput
+
+# Archivos estaticos
+python manage.py collectstatic --noinput
