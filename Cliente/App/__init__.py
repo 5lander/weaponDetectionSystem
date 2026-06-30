@@ -13,12 +13,14 @@ from .detection_tapo import DetectionTapo
 from .detectionWindowDual import DetectionWindowDual
 from .loginWindowClass import LoginWindow
 from .monitoringWindowClass import MonitoringWindow
-from .cameraManagerWindow import CameraManagerWindow 
+from .cameraManagerWindow import CameraManagerWindow
+from .inference_engine import InferenceEngine
 
 __all__ = [
     'DetectionTapo',
     'DetectionWindowDual',
-    'LoginWindow', 
+    'LoginWindow',
     'MonitoringWindow',
-    'CameraManagerWindow' 
+    'CameraManagerWindow',
+    'InferenceEngine'
 ]

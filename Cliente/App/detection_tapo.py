@@ -13,8 +13,6 @@ from collections import deque
 from PyQt5.QtCore import QThread, pyqtSignal, Qt
 from PyQt5.QtGui import QImage
 import cv2
-from ultralytics import YOLO
-import numpy as np
 import psutil
 import GPUtil
 import requests
@@ -34,46 +32,45 @@ class DetectionTapo(QThread):
     weaponDetected = pyqtSignal(str)
     statusUpdate = pyqtSignal(str)
     
-    def __init__(self, model_path, token, location, receiver, camera_config, camera_id=1):
+    def __init__(self, model_path, token, location, receiver, camera_config, camera_id=1, engine=None):
         super(DetectionTapo, self).__init__()
-        
+
         # Identificación
         self.camera_id = camera_id
         self.camera_name = camera_config.get('name', f'Camera {camera_id}')
-        
+
         # Configuración básica
         self.model_path = model_path
-        self.colors = {0: (0, 0, 255), 1: (0, 165, 255)}
         self.token = token
         self.location = location
         self.receiver = receiver
-        
+
+        # Motor de inferencia COMPARTIDO (1 modelo para todas las cámaras).
+        # La inferencia ya no ocurre en esta clase: se delega al engine.
+        self.engine = engine
+
         # Configuración de cámara
         self.camera_config = camera_config
         self.rtsp_url = self._build_rtsp_url()
-        
+
         # Control de ejecución
         self.running = False
         self.cap = None
-        self.model = None
-        
+
         # OPTIMIZACIÓN: Intervalos ajustados para máxima velocidad
-        self.analysis_interval = 2  # Analizar cada 2 segundos (antes 3)
+        self.analysis_interval = 2  # Enviar frame a análisis cada 2 segundos
         self.last_analysis_time = 0
-        self.capture_interval = 4   # Enviar detecciones cada 4 segundos (antes 5)
+        self.capture_interval = 4   # Enviar detecciones cada 4 segundos
         self.last_capture_time = 0
-        self.resource_check_interval = 10  # Verificar recursos cada 10s (antes 5)
+        self.resource_check_interval = 10  # Verificar recursos cada 10s
         self.last_resource_check = 0
-        
-        # OPTIMIZACIÓN: Sistema de colas sin buffer (máximo 1 frame pendiente)
+
+        # Cola de captura sin buffer (máximo 1 frame pendiente) para el video en vivo
         self.frame_queue = Queue(maxsize=1)
-        self.analysis_queue = Queue(maxsize=1)
-        
-        # OPTIMIZACIÓN: Threads independientes
+
+        # Thread de captura (el de análisis ya no existe: lo maneja el engine)
         self.capture_thread = None
-        self.analysis_thread = None
-        self.analysis_running = False
-        
+
         # OPTIMIZACIÓN: Frame skipping inteligente
         self.frame_counter = 0
         self.skip_frames = 0  # Procesar todos los frames para UI
@@ -95,32 +92,26 @@ class DetectionTapo(QThread):
         logging.info(f"[Cámara {self.camera_id}] Ubicación: {self.location}")
     
     def _build_rtsp_url(self):
-        """Construir URL RTSP optimizada"""
-        cfg = self.camera_config
-        username = cfg.get('username', 'admin')
-        password = cfg.get('password', '')
-        ip = cfg.get('ip')
-        port = cfg.get('port', 554)
-        stream = cfg.get('stream', 'stream1')
-        
-        return f"rtsp://{username}:{password}@{ip}:{port}/{stream}"
+        """Construir URL RTSP según la marca de la cámara (Tapo, Hikvision, Dahua, etc.)."""
+        from .rtsp_profiles import build_rtsp_url
+        return build_rtsp_url(self.camera_config)
     
     def run(self):
         """Thread principal de ejecución OPTIMIZADO"""
         self.running = True
-        
-        # Cargar modelo YOLO una sola vez
-        if not self._load_model():
-            return
-        
+
         # Inicializar cámara con máxima optimización
         if not self._initialize_rtsp_camera_optimized():
             return
-        
-        # OPTIMIZACIÓN: Iniciar threads de captura y análisis
+
+        # Registrar esta cámara en el motor de inferencia compartido para
+        # recibir SIEMPRE los resultados de sus propias capturas (por camera_id).
+        if self.engine:
+            self.engine.register(self.camera_id, self.on_inference_result)
+
+        # Iniciar SOLO el thread de captura (el análisis lo hace el engine)
         self._start_capture_thread()
-        self._start_analysis_thread()
-        
+
         # OPTIMIZACIÓN: Loop principal solo para UI (máxima responsividad)
         retry_count = 0
         max_retries = 3
@@ -138,10 +129,11 @@ class DetectionTapo(QThread):
                     # Actualizar FPS
                     self._update_fps()
                     
-                    # Enviar a análisis cada N segundos
+                    # Enviar frame al motor de inferencia compartido cada N segundos
                     current_time = time.time()
                     if (current_time - self.last_analysis_time) >= self.analysis_interval:
-                        self._queue_frame_for_analysis(frame.copy())
+                        if self.engine:
+                            self.engine.submit(self.camera_id, frame.copy())
                         self.last_analysis_time = current_time
                     
                     # Verificar recursos (menos frecuente)
@@ -162,24 +154,7 @@ class DetectionTapo(QThread):
                 break
         
         self.cleanup()
-    
-    def _load_model(self):
-        """Cargar modelo YOLO con optimizaciones"""
-        try:
-            self.model = YOLO(self.model_path)
-            
-            # OPTIMIZACIÓN: Configurar modelo para inferencia rápida
-            self.model.fuse()  # Fusionar capas para velocidad
-            
-            logging.info(f"[Cámara {self.camera_id}] Modelo YOLO cargado y optimizado")
-            return True
-        except Exception as e:
-            error_msg = f"[Cámara {self.camera_id}] Error al cargar YOLO: {str(e)}"
-            self.error.emit(error_msg)
-            logging.error(error_msg)
-            self.running = False
-            return False
-    
+
     def _initialize_rtsp_camera_optimized(self):
         """Inicializar cámara RTSP con MÁXIMA OPTIMIZACIÓN"""
         try:
@@ -306,110 +281,27 @@ class DetectionTapo(QThread):
             self.reconnect_attempts = 0
             logging.info(f"[Cámara {self.camera_id}] Reconexión exitosa")
     
-    def _start_analysis_thread(self):
-        """Iniciar thread de análisis YOLO"""
-        self.analysis_running = True
-        self.analysis_thread = threading.Thread(
-            target=self._analysis_worker_optimized, 
-            daemon=True,
-            name=f"Analysis-Cam{self.camera_id}"
-        )
-        self.analysis_thread.start()
-        logging.info(f"[Cámara {self.camera_id}] Thread de análisis iniciado")
-    
-    def _analysis_worker_optimized(self):
-        """Worker de análisis OPTIMIZADO"""
-        logging.info(f"[Cámara {self.camera_id}] Análisis worker iniciado")
-        
-        while self.analysis_running:
-            try:
-                if self.analysis_queue.empty():
-                    time.sleep(0.1)
-                    continue
-                
-                frame = self.analysis_queue.get(timeout=1)
-                
-                # OPTIMIZACIÓN: Análisis YOLO con configuración rápida
-                self._analyze_frame_fast(frame)
-                
-            except Empty:
-                continue
-            except Exception as e:
-                logging.error(f"[Cámara {self.camera_id}] Error en análisis: {e}")
-                time.sleep(0.1)
-        
-        logging.info(f"[Cámara {self.camera_id}] Análisis worker detenido")
-    
-    def _queue_frame_for_analysis(self, frame):
-        """Agregar frame a cola de análisis SIN BLOQUEO"""
-        try:
-            if self.analysis_queue.full():
-                try:
-                    self.analysis_queue.get_nowait()
-                except:
-                    pass
-            self.analysis_queue.put_nowait(frame)
-        except:
-            pass
-    
-    def _analyze_frame_fast(self, frame):
-        """Análisis YOLO OPTIMIZADO"""
-        try:
-            # OPTIMIZACIÓN: Inferencia rápida
-            results = self.model(
-                frame,
-                verbose=False,
-                conf=0.5,           # Confianza mínima
-                iou=0.45,           # IoU para NMS
-                max_det=10,         # Máximo 10 detecciones
-                half=False,         # Usar FP16 si tienes GPU
-                device='0' if self._has_gpu() else 'cpu'
-            )
-            
-            detected_objects = []
-            for result in results:
-                boxes = result.boxes
-                for box in boxes:
-                    conf = float(box.conf[0])
-                    cls = int(box.cls[0])
-                    
-                    detected_objects.append({
-                        'class': cls,
-                        'confidence': conf,
-                        'box': box.xyxy[0].tolist()
-                    })
-                    
-                    # Dibujar en frame
-                    x1, y1, x2, y2 = map(int, box.xyxy[0])
-                    cv2.rectangle(frame, (x1, y1), (x2, y2), 
-                                self.colors.get(cls, (255, 0, 0)), 2)
-                    
-                    label = f"{self.model.names[cls]} {conf:.2f}"
-                    cv2.putText(frame, label, (x1, y1-10),
-                              cv2.FONT_HERSHEY_SIMPLEX, 0.5, 
-                              self.colors.get(cls, (255, 0, 0)), 2)
-            
-            if detected_objects:
-                msg = f"[Cámara {self.camera_id}] {len(detected_objects)} objetos detectados"
-                logging.info(msg)
-                self.weaponDetected.emit(msg)
-                
-                # Guardar y enviar
-                current_time = time.time()
-                if (current_time - self.last_capture_time) >= self.capture_interval:
-                    self.saveDetection(frame, detected_objects)
-                    self.last_capture_time = current_time
-                    
-        except Exception as e:
-            logging.error(f"[Cámara {self.camera_id}] Error en análisis YOLO: {e}")
-    
-    def _has_gpu(self):
-        """Verificar si hay GPU disponible"""
-        try:
-            gpus = GPUtil.getGPUs()
-            return len(gpus) > 0
-        except:
-            return False
+    def on_inference_result(self, annotated_frame, detections):
+        """Callback que invoca el motor de inferencia con el resultado de ESTA cámara.
+
+        Corre en el hilo del worker del engine (NO en el hilo Qt). Es seguro porque:
+        - emitir señales Qt entre hilos es thread-safe (conexión en cola),
+        - saveDetection solo escribe un archivo y lanza su propio hilo de subida
+          (no toca widgets),
+        - last_capture_time lo escribe solo este callback (worker único por cámara).
+        """
+        if not detections:
+            return
+
+        msg = f"[Cámara {self.camera_id}] {len(detections)} objetos detectados"
+        logging.info(msg)
+        self.weaponDetected.emit(msg)
+
+        # Guardar y enviar (rate-limitado por capture_interval), igual que antes
+        current_time = time.time()
+        if (current_time - self.last_capture_time) >= self.capture_interval:
+            self.saveDetection(annotated_frame, detections)
+            self.last_capture_time = current_time
     
     def update_ui(self, frame):
         """Actualizar UI OPTIMIZADO"""
@@ -523,32 +415,32 @@ class DetectionTapo(QThread):
     def cleanup(self):
         """Limpiar recursos"""
         logging.info(f"[Cámara {self.camera_id}] Limpiando recursos...")
-        
-        self.analysis_running = False
-        
-        # Esperar threads
-        if self.analysis_thread and self.analysis_thread.is_alive():
-            self.analysis_thread.join(timeout=2)
-        
+
+        # Dar de baja del motor de inferencia (deja de recibir resultados)
+        if self.engine:
+            self.engine.unregister(self.camera_id)
+
+        # Esperar thread de captura
         if self.capture_thread and self.capture_thread.is_alive():
             self.capture_thread.join(timeout=2)
-        
-        # Limpiar colas
-        for queue in [self.analysis_queue, self.frame_queue]:
-            while not queue.empty():
-                try:
-                    queue.get_nowait()
-                except:
-                    break
-        
+
+        # Limpiar cola de captura
+        while not self.frame_queue.empty():
+            try:
+                self.frame_queue.get_nowait()
+            except Empty:
+                break
+
         # Liberar cámara
         if self.cap:
             self.cap.release()
-        
+
         logging.info(f"[Cámara {self.camera_id}] Recursos liberados")
-    
+
     def stop(self):
         """Detener detección"""
         self.running = False
-        self.analysis_running = False
+        # Dar de baja del engine de inmediato para no entregar resultados a una cámara detenida
+        if self.engine:
+            self.engine.unregister(self.camera_id)
         logging.info(f"[Cámara {self.camera_id}] Deteniendo...")

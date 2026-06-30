@@ -18,5 +18,35 @@
         "stream": "stream1",
         "port": 554,
         "enabled": true
+    },
+    "camera_3": {
+        "name": "Camara tres ",
+        "ip": "192.168.0.11",
+        "username": "admin",
+        "password": "admin",
+        "location": "Entrada Principal",
+        "stream": "stream2",
+        "port": 554,
+        "enabled": true
+    },
+    "camera_4": {
+        "name": "camara cuatro",
+        "ip": "192.168.1.10",
+        "username": "admin",
+        "password": "admin",
+        "location": "Entrada Sur",
+        "stream": "stream1",
+        "port": 554,
+        "enabled": true
+    },
+    "camera_5": {
+        "name": "Camara 5",
+        "ip": "192.168.1.15",
+        "username": "admin",
+        "password": "admin",
+        "location": "Entrada",
+        "stream": "stream1",
+        "port": 554,
+        "enabled": true
     }
 }

@@ -16,6 +16,9 @@ from PyQt5.QtGui import QFont
 import logging
 import cv2
 
+from .rtsp_fields import RtspFieldsGroup
+from . import rtsp_profiles as profiles
+
 
 class AddCameraDialog(QDialog):
     """Diálogo para agregar/editar una cámara"""
@@ -26,7 +29,7 @@ class AddCameraDialog(QDialog):
         self.is_edit = is_edit
         
         self.setWindowTitle("✏️ Editar Cámara" if is_edit else "➕ Agregar Nueva Cámara")
-        self.setMinimumWidth(500)
+        self.setMinimumWidth(580)
         
         self.setupUI()
         
@@ -37,79 +40,44 @@ class AddCameraDialog(QDialog):
         """Configurar interfaz del diálogo"""
         layout = QVBoxLayout(self)
         layout.setSpacing(15)
-        
+
         # Título
         title = QLabel("➕ Nueva Cámara" if not self.is_edit else "✏️ Editar Cámara")
         title.setFont(QFont("Segoe UI", 14, QFont.Bold))
         title.setAlignment(Qt.AlignCenter)
         layout.addWidget(title)
-        
-        # Formulario
+
+        # Identificación (nombre + ubicación + estado)
         form_group = QGroupBox("📋 Información de la Cámara")
         form_group.setFont(QFont("Segoe UI", 10, QFont.Bold))
         form_layout = QFormLayout()
         form_layout.setSpacing(12)
-        
+
         # Nombre
         self.name_input = QLineEdit()
         self.name_input.setPlaceholderText("Ej: Cámara Entrada Principal")
         self.name_input.setMinimumHeight(35)
         form_layout.addRow("🏷️ Nombre:", self.name_input)
-        
-        # IP
-        self.ip_input = QLineEdit()
-        self.ip_input.setPlaceholderText("192.168.1.10")
-        self.ip_input.setMinimumHeight(35)
-        form_layout.addRow("🌐 Dirección IP:", self.ip_input)
-        
-        # Usuario
-        self.user_input = QLineEdit()
-        self.user_input.setPlaceholderText("Usuario de Camera Account")
-        self.user_input.setMinimumHeight(35)
-        form_layout.addRow("👤 Usuario:", self.user_input)
-        
-        # Contraseña
-        self.pass_input = QLineEdit()
-        self.pass_input.setPlaceholderText("Contraseña")
-        self.pass_input.setMinimumHeight(35)
-        self.pass_input.setEchoMode(QLineEdit.Password)
-        
-        show_pass = QCheckBox("Mostrar contraseña")
-        show_pass.stateChanged.connect(
-            lambda state: self.pass_input.setEchoMode(
-                QLineEdit.Normal if state == Qt.Checked else QLineEdit.Password
-            )
-        )
-        
-        pass_layout = QHBoxLayout()
-        pass_layout.addWidget(self.pass_input)
-        pass_layout.addWidget(show_pass)
-        form_layout.addRow("🔒 Contraseña:", pass_layout)
-        
+
         # Ubicación
         self.location_input = QLineEdit()
         self.location_input.setPlaceholderText("Ej: Entrada Principal, Piso 2")
         self.location_input.setMinimumHeight(35)
         form_layout.addRow("📍 Ubicación:", self.location_input)
-        
-        # Stream
-        self.stream_combo = QComboBox()
-        self.stream_combo.addItems([
-            "Alta Calidad (stream1) - 2304x1296",
-            "Baja Calidad (stream2) - 640x360"
-        ])
-        self.stream_combo.setMinimumHeight(35)
-        form_layout.addRow("📺 Calidad:", self.stream_combo)
-        
+
         # Habilitada
         self.enabled_check = QCheckBox("Habilitar esta cámara")
         self.enabled_check.setChecked(True)
         self.enabled_check.setFont(QFont("Segoe UI", 10))
         form_layout.addRow("✅ Estado:", self.enabled_check)
-        
+
         form_group.setLayout(form_layout)
         layout.addWidget(form_group)
-        
+
+        # Conexión RTSP (marca, IP, puerto, usuario, contraseña, canal, calidad, ruta)
+        self.fields = RtspFieldsGroup(self)
+        layout.addWidget(self.fields)
+
         # Botón de prueba
         test_btn = QPushButton("🔧 Probar Conexión")
         test_btn.setMinimumHeight(40)
@@ -141,31 +109,26 @@ class AddCameraDialog(QDialog):
     def load_camera_data(self):
         """Cargar datos de cámara existente"""
         self.name_input.setText(self.camera_data.get('name', ''))
-        self.ip_input.setText(self.camera_data.get('ip', ''))
-        self.user_input.setText(self.camera_data.get('username', ''))
-        self.pass_input.setText(self.camera_data.get('password', ''))
         self.location_input.setText(self.camera_data.get('location', ''))
         self.enabled_check.setChecked(self.camera_data.get('enabled', True))
-        
-        if self.camera_data.get('stream') == 'stream2':
-            self.stream_combo.setCurrentIndex(1)
-    
+        self.fields.set_config(self.camera_data)
+
     def test_connection(self):
         """Probar conexión con los datos ingresados"""
-        ip = self.ip_input.text()
-        user = self.user_input.text()
-        password = self.pass_input.text()
-        stream = 'stream1' if self.stream_combo.currentIndex() == 0 else 'stream2'
-        
+        cfg = self.fields.get_config()
+        ip = cfg['ip']
+        user = cfg['username']
+        password = cfg['password']
+
         if not ip or not user or not password:
             QMessageBox.warning(
                 self, "Campos Incompletos",
                 "Complete IP, usuario y contraseña para probar."
             )
             return
-        
-        rtsp_url = f"rtsp://{user}:{password}@{ip}:554/{stream}"
-        
+
+        rtsp_url = self.fields.rtsp_url()
+
         try:
             os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
                 "rtsp_transport;udp|fflags;nobuffer|flags;low_delay"
@@ -184,7 +147,7 @@ class AddCameraDialog(QDialog):
                         f"¡Cámara conectada correctamente!\n\n"
                         f"Resolución: {width}x{height}\n"
                         f"IP: {ip}\n"
-                        f"Stream: {stream}"
+                        f"Marca: {profiles.brand_label(cfg['brand'])}"
                     )
                 else:
                     QMessageBox.warning(
@@ -211,40 +174,47 @@ class AddCameraDialog(QDialog):
     
     def validate_and_accept(self):
         """Validar datos antes de aceptar"""
+        cfg = self.fields.get_config()
+
         if not self.name_input.text():
             QMessageBox.warning(self, "Campo Requerido", "Ingrese un nombre para la cámara.")
             return
-        
-        if not self.ip_input.text():
-            QMessageBox.warning(self, "Campo Requerido", "Ingrese la dirección IP.")
-            return
-        
-        if not self.user_input.text():
-            QMessageBox.warning(self, "Campo Requerido", "Ingrese el usuario.")
-            return
-        
-        if not self.pass_input.text():
-            QMessageBox.warning(self, "Campo Requerido", "Ingrese la contraseña.")
-            return
-        
+
         if not self.location_input.text():
             QMessageBox.warning(self, "Campo Requerido", "Ingrese la ubicación.")
             return
-        
+
+        if profiles.brand_uses_custom_path(cfg['brand']):
+            # Marca genérica: basta con una ruta/URL RTSP (puede traer su propia IP/credenciales).
+            if not cfg['path']:
+                QMessageBox.warning(self, "Campo Requerido",
+                                    "Ingrese la ruta RTSP (o pegue la URL rtsp:// completa).")
+                return
+            if not str(cfg['path']).lower().startswith('rtsp://') and not cfg['ip']:
+                QMessageBox.warning(self, "Campo Requerido", "Ingrese la dirección IP.")
+                return
+        else:
+            if not cfg['ip']:
+                QMessageBox.warning(self, "Campo Requerido", "Ingrese la dirección IP.")
+                return
+            if not cfg['username']:
+                QMessageBox.warning(self, "Campo Requerido", "Ingrese el usuario.")
+                return
+            if not cfg['password']:
+                QMessageBox.warning(self, "Campo Requerido", "Ingrese la contraseña.")
+                return
+
         self.accept()
-    
+
     def get_camera_data(self):
-        """Obtener datos de la cámara"""
-        return {
+        """Obtener datos de la cámara (identificación + conexión RTSP)."""
+        data = {
             'name': self.name_input.text(),
-            'ip': self.ip_input.text(),
-            'username': self.user_input.text(),
-            'password': self.pass_input.text(),
             'location': self.location_input.text(),
-            'stream': 'stream1' if self.stream_combo.currentIndex() == 0 else 'stream2',
-            'port': 554,
-            'enabled': self.enabled_check.isChecked()
+            'enabled': self.enabled_check.isChecked(),
         }
+        data.update(self.fields.get_config())
+        return data
 
 
 class CameraManagerWindow(QDialog):
@@ -377,18 +347,20 @@ class CameraManagerWindow(QDialog):
         details_layout.setSpacing(12)
         
         self.detail_name = QLabel("---")
+        self.detail_brand = QLabel("---")
         self.detail_ip = QLabel("---")
         self.detail_user = QLabel("---")
         self.detail_location = QLabel("---")
         self.detail_stream = QLabel("---")
         self.detail_status = QLabel("---")
-        
-        for label in [self.detail_name, self.detail_ip, self.detail_user,
+
+        for label in [self.detail_name, self.detail_brand, self.detail_ip, self.detail_user,
                       self.detail_location, self.detail_stream, self.detail_status]:
             label.setFont(QFont("Segoe UI", 10))
             label.setWordWrap(True)
-        
+
         details_layout.addRow("🏷️ Nombre:", self.detail_name)
+        details_layout.addRow("📷 Marca:", self.detail_brand)
         details_layout.addRow("🌐 IP:", self.detail_ip)
         details_layout.addRow("👤 Usuario:", self.detail_user)
         details_layout.addRow("📍 Ubicación:", self.detail_location)
@@ -529,14 +501,16 @@ class CameraManagerWindow(QDialog):
         cam = self.cameras[key]
         
         self.detail_name.setText(cam.get('name', '---'))
+        self.detail_brand.setText(profiles.brand_label(cam.get('brand', 'tapo')))
         self.detail_ip.setText(cam.get('ip', '---'))
         self.detail_user.setText(cam.get('username', '---'))
         self.detail_location.setText(cam.get('location', '---'))
-        
-        stream = cam.get('stream', 'stream1')
-        stream_text = "Alta Calidad (stream1)" if stream == 'stream1' else "Baja Calidad (stream2)"
-        self.detail_stream.setText(stream_text)
-        
+
+        quality = profiles.normalize_quality(cam)
+        self.detail_stream.setText(
+            "Principal (alta calidad)" if quality == 'main' else "Secundaria (baja calidad)"
+        )
+
         enabled = cam.get('enabled', True)
         self.detail_status.setText("✅ Habilitada" if enabled else "⚪ Deshabilitada")
     
@@ -602,7 +576,7 @@ class CameraManagerWindow(QDialog):
             self.update_camera_list()
             
             # Limpiar detalles
-            for label in [self.detail_name, self.detail_ip, self.detail_user,
+            for label in [self.detail_name, self.detail_brand, self.detail_ip, self.detail_user,
                           self.detail_location, self.detail_stream, self.detail_status]:
                 label.setText("---")
     
@@ -615,19 +589,15 @@ class CameraManagerWindow(QDialog):
         
         key = items[0].data(Qt.UserRole)
         cam = self.cameras[key]
-        
+
         ip = cam.get('ip')
-        user = cam.get('username')
-        password = cam.get('password')
-        stream = cam.get('stream', 'stream1')
-        
-        rtsp_url = f"rtsp://{user}:{password}@{ip}:554/{stream}"
-        
+        rtsp_url = profiles.build_rtsp_url(cam)
+
         try:
             os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
                 "rtsp_transport;udp|fflags;nobuffer|flags;low_delay"
             )
-            
+
             cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)
             
             if cap.isOpened():
