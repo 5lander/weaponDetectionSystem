@@ -19,6 +19,7 @@ BRANDS = [
     ('dahua', 'Dahua'),
     ('reolink', 'Reolink'),
     ('custom', 'Genérica / Otra (ruta manual)'),
+    ('webcam', 'Webcam local (USB / laptop)'),
 ]
 
 # Calidad de stream: clave canónica -> etiqueta
@@ -31,6 +32,8 @@ QUALITIES = [
 _NEEDS_CHANNEL = {'hikvision', 'dahua', 'reolink'}
 # Marcas que muestran un campo de ruta RTSP manual.
 _USES_CUSTOM_PATH = {'custom'}
+# Fuentes locales (no RTSP): webcam USB / cámara de la laptop.
+_LOCAL_SOURCE = {'webcam', 'local', 'usb'}
 
 DEFAULT_BRAND = 'tapo'
 DEFAULT_PORT = 554
@@ -52,6 +55,19 @@ def brand_needs_channel(brand):
 def brand_uses_custom_path(brand):
     """True si la marca usa una ruta RTSP escrita a mano."""
     return (brand or '').lower() in _USES_CUSTOM_PATH
+
+
+def is_local_source(cfg):
+    """True si la cámara es una fuente local (webcam USB / laptop), no RTSP."""
+    return str(cfg.get('brand', '') or '').lower() in _LOCAL_SOURCE
+
+
+def local_device_index(cfg):
+    """Índice de dispositivo OpenCV para una webcam local (0 = cámara por defecto)."""
+    try:
+        return int(cfg.get('device_index', 0))
+    except (ValueError, TypeError):
+        return 0
 
 
 def normalize_quality(cfg):
@@ -110,6 +126,11 @@ def build_rtsp_url(cfg):
     """
     try:
         brand = (cfg.get('brand') or DEFAULT_BRAND).lower()
+
+        if brand in _LOCAL_SOURCE:
+            # Fuente local: no hay URL RTSP; se identifica por índice de dispositivo.
+            return f"webcam:{local_device_index(cfg)}"
+
         user = quote(str(cfg.get('username', '') or ''), safe='')
         pwd = quote(str(cfg.get('password', '') or ''), safe='')
         ip = str(cfg.get('ip', '') or '').strip()

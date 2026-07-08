@@ -492,7 +492,9 @@ class MonitoringWindow(QMainWindow):
         
         # Validar campos (según la marca)
         brand = config.get('brand', 'tapo')
-        if profiles.brand_uses_custom_path(brand):
+        if profiles.is_local_source(config):
+            valid = True
+        elif profiles.brand_uses_custom_path(brand):
             valid = bool((config.get('path') or '').strip())
         else:
             valid = bool(config['ip'] and config['username'] and config['password'])
@@ -510,25 +512,34 @@ class MonitoringWindow(QMainWindow):
             self, "Probando Conexión",
             f"Conectando a cámara {camera_num}...\nEsto puede tardar unos segundos."
         )
-        
+
         try:
-            os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
-                "rtsp_transport;udp|fflags;nobuffer|flags;low_delay"
-            )
-            
-            cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)
-            
+            if profiles.is_local_source(config):
+                idx = profiles.local_device_index(config)
+                if sys.platform.startswith('win'):
+                    cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
+                else:
+                    cap = cv2.VideoCapture(idx)
+            else:
+                os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
+                    "rtsp_transport;udp|fflags;nobuffer|flags;low_delay"
+                )
+                cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)
+
             if cap.isOpened():
                 ret, frame = cap.read()
                 if ret:
                     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
                     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                    
+
+                    fuente = (f"Webcam local (índice {profiles.local_device_index(config)})"
+                              if profiles.is_local_source(config)
+                              else f"IP: {config.get('ip', '')}")
                     QMessageBox.information(
                         self, f"✅ Cámara {camera_num} Conectada",
                         f"¡Conexión exitosa!\n\n"
                         f"Resolución: {width}x{height}\n"
-                        f"IP: {config['ip']}\n"
+                        f"{fuente}\n"
                         f"Marca: {profiles.brand_label(config.get('brand', 'tapo'))}"
                     )
                 else:
@@ -571,18 +582,27 @@ class MonitoringWindow(QMainWindow):
 
             # Probar conexión
             rtsp_url = profiles.build_rtsp_url(config)
+            is_local = profiles.is_local_source(config)
 
             try:
-                os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
-                    "rtsp_transport;udp|fflags;nobuffer|flags;low_delay"
-                )
-                
-                cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)
-                
+                if is_local:
+                    idx = profiles.local_device_index(config)
+                    if sys.platform.startswith('win'):
+                        cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
+                    else:
+                        cap = cv2.VideoCapture(idx)
+                else:
+                    os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
+                        "rtsp_transport;udp|fflags;nobuffer|flags;low_delay"
+                    )
+                    cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)
+
                 if cap.isOpened():
                     ret, _ = cap.read()
                     if ret:
-                        results.append(f"Cámara {camera_num}: ✅ OK ({config['ip']})")
+                        fuente = (f"webcam {profiles.local_device_index(config)}"
+                                  if is_local else config.get('ip', ''))
+                        results.append(f"Cámara {camera_num}: ✅ OK ({fuente})")
                     else:
                         results.append(f"Cámara {camera_num}: ⚠️ Sin frames")
                     cap.release()
@@ -609,6 +629,9 @@ class MonitoringWindow(QMainWindow):
         if not config.get('location'):
             return False
         brand = config.get('brand', 'tapo')
+        if profiles.is_local_source(config):
+            # Webcam local: solo necesita ubicación (ya validada arriba).
+            return True
         if profiles.brand_uses_custom_path(brand):
             path = (config.get('path') or '').strip()
             if not path:

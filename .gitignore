@@ -37,6 +37,9 @@ share/python-wheels/
 # Archivos grandes a ignorar específicamente
 Cliente/dist.rar
 Cliente/model/last.pt
+docs/
+Cliente/detections
+Cliente/inference_metrics.csv
 *.pt
 *.pth
 *.h5

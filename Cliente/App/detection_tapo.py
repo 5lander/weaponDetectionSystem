@@ -51,6 +51,10 @@ class DetectionTapo(QThread):
 
         # Configuración de cámara
         self.camera_config = camera_config
+        # Fuente local (webcam USB / laptop) vs cámara IP RTSP
+        from .rtsp_profiles import is_local_source, local_device_index
+        self.is_local = is_local_source(camera_config)
+        self.local_index = local_device_index(camera_config)
         self.rtsp_url = self._build_rtsp_url()
 
         # Control de ejecución
@@ -155,9 +159,45 @@ class DetectionTapo(QThread):
         
         self.cleanup()
 
+    def _initialize_local_camera(self):
+        """Inicializar una webcam local (USB / cámara de la laptop) por índice."""
+        try:
+            logging.info(f"[Cámara {self.camera_id}] Abriendo webcam local (índice {self.local_index})...")
+
+            # En Windows, DirectShow abre la webcam mucho más rápido y estable.
+            if sys.platform.startswith('win'):
+                self.cap = cv2.VideoCapture(self.local_index, cv2.CAP_DSHOW)
+            else:
+                self.cap = cv2.VideoCapture(self.local_index)
+
+            if self.cap.isOpened():
+                self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+                width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                logging.info(f"[Cámara {self.camera_id}] ✅ Webcam local conectada - {width}x{height}")
+                self.statusUpdate.emit(f"[Cámara {self.camera_id}] Webcam local conectada")
+                return True
+
+            error_msg = f"[Cámara {self.camera_id}] ❌ No se pudo abrir la webcam local (índice {self.local_index})"
+            self.error.emit(error_msg)
+            logging.error(error_msg)
+            self.running = False
+            return False
+
+        except Exception as e:
+            error_msg = f"[Cámara {self.camera_id}] Error al abrir webcam local: {str(e)}"
+            self.error.emit(error_msg)
+            logging.error(error_msg)
+            self.running = False
+            return False
+
     def _initialize_rtsp_camera_optimized(self):
         """Inicializar cámara RTSP con MÁXIMA OPTIMIZACIÓN"""
         try:
+            # Fuente local (webcam USB / laptop): abrir por índice, sin FFmpeg/RTSP.
+            if self.is_local:
+                return self._initialize_local_camera()
+
             # OPTIMIZACIÓN CRÍTICA: Variables de entorno FFmpeg
             os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = (
                 "rtsp_transport;udp|"           # UDP para mínima latencia
@@ -393,16 +433,18 @@ class DetectionTapo(QThread):
         try:
             url = 'https://weaponnotificationserver.onrender.com/api/images/'
             
-            files = {'image': open(filepath, 'rb')}
-            data = {
-                'token': self.token,
-                'location': self.location,
-                'receiver': self.receiver,
-                'camera_id': self.camera_id,
-                'detections': str(detections)
-            }
-            
-            response = requests.post(url, files=files, data=data, timeout=10)
+            # Los nombres DEBEN coincidir con el serializer del servidor
+            # (UploadAlertSerializer): userID (= token), location, alertReceiver, image.
+            headers = {'Authorization': 'Token ' + str(self.token)}
+            with open(filepath, 'rb') as img_file:
+                files = {'image': img_file}
+                data = {
+                    'userID': self.token,
+                    'location': self.location,
+                    'alertReceiver': self.receiver,
+                }
+                response = requests.post(url, files=files, data=data,
+                                         headers=headers, timeout=10)
             
             if response.status_code == 200:
                 logging.info(f"[Cámara {self.camera_id}] Enviado al servidor")
