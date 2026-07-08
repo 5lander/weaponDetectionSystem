@@ -363,11 +363,19 @@ class DetectionWindowDual(QMainWindow):
     
     def update_camera_image(self, camera_id, image):
         """Actualizar imagen de cámara"""
+        # Ignorar señales en cola que llegan DURANTE el cierre: la ventana (y sus
+        # QLabel en C++) puede estar ya destruida (deleteLater), y tocar
+        # setPixmap sobre un widget muerto provoca un access violation (crash
+        # nativo al Detener el sistema). Ver _shutdown_and_emit (_is_closing).
+        if self._is_closing:
+            return
         if camera_id in self.camera_labels:
             self.camera_labels[camera_id].setPixmap(QPixmap.fromImage(image))
-    
+
     def update_camera_status(self, camera_id, message):
         """Actualizar estado de cámara"""
+        if self._is_closing:
+            return
         if camera_id in self.status_labels:
             # Extraer solo texto relevante (quitar [Cámara N])
             clean_msg = message.split(']')[-1].strip() if ']' in message else message
@@ -383,6 +391,8 @@ class DetectionWindowDual(QMainWindow):
     
     def update_system_resources(self, data):
         """Actualizar información de recursos del sistema"""
+        if self._is_closing:
+            return
         try:
             self.cpu_label.setText(f"CPU: {data.get('cpu', 0):.1f}%")
             self.ram_label.setText(f"RAM: {data.get('memory', 0):.1f}%")
@@ -396,6 +406,8 @@ class DetectionWindowDual(QMainWindow):
     
     def on_weapon_detected(self, message):
         """Manejar detección de armas"""
+        if self._is_closing:
+            return
         logging.warning(f"DETECCIÓN: {message}")
         
         # Actualizar contador de detecciones

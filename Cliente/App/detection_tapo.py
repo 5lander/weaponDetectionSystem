@@ -335,13 +335,18 @@ class DetectionTapo(QThread):
 
         msg = f"[Cámara {self.camera_id}] {len(detections)} objetos detectados"
         logging.info(msg)
-        self.weaponDetected.emit(msg)
 
-        # Guardar y enviar (rate-limitado por capture_interval), igual que antes
+        # Guardar y enviar (rate-limitado por capture_interval), igual que antes.
+        # La señal weaponDetected (que incrementa el contador de la UI) se emite
+        # SOLO cuando realmente se guarda y envía al servidor, para que el
+        # contador coincida 1:1 con los envíos/registros del servidor (antes se
+        # emitía en cada ciclo de inferencia ~cada 2s, por eso la UI mostraba
+        # más detecciones que imágenes enviadas).
         current_time = time.time()
         if (current_time - self.last_capture_time) >= self.capture_interval:
             self.saveDetection(annotated_frame, detections)
             self.last_capture_time = current_time
+            self.weaponDetected.emit(msg)
     
     def update_ui(self, frame):
         """Actualizar UI OPTIMIZADO"""

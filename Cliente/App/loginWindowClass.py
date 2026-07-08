@@ -88,9 +88,15 @@ class LoginWindow(QMainWindow):
 
     def customize_title_bar(self):
         """Personaliza la barra de título"""
-        icon_path = self.resource_path('Assets/icon.png')
+        # El ícono real de la app es UI/icon.ico (el mismo que usa el .exe).
+        # Antes se buscaba 'Assets/icon.png', ruta que no existe, por lo que el
+        # setWindowIcon nunca se ejecutaba y la ventana mostraba el ícono
+        # genérico de Windows.
+        icon_path = self.resource_path('UI/icon.ico')
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
+        else:
+            logging.warning(f"Ícono de login no encontrado en: {icon_path}")
 
     def fix_component_positioning(self):
         """Arregla el posicionamiento y dimensiones de los componentes"""
