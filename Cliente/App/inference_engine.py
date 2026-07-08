@@ -115,12 +115,21 @@ class InferenceEngine:
         logging.info("[Engine] Detenido y modelo liberado")
 
     def _detect_gpu(self):
-        if GPUtil is None:
+        # IMPORTANTE: no basta con que exista una GPU física (GPUtil/nvidia-smi);
+        # torch debe estar compilado con CUDA. Con torch CPU-only, pedir device=0
+        # hace que TODA inferencia falle ("Invalid CUDA 'device=0' requested").
+        try:
+            import torch
+            if not torch.cuda.is_available():
+                return False
+        except Exception:
             return False
+        if GPUtil is None:
+            return True
         try:
             return len(GPUtil.getGPUs()) > 0
         except Exception:
-            return False
+            return True
 
     # ------------------------------------------------------------------ registro / envío
     def register(self, camera_id, callback):

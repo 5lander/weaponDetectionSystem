@@ -212,10 +212,13 @@ class MainApplication(QObject):
             for cam_num, config in cameras.items():
                 logging.info(f"")
                 logging.info(f"Configurando Cámara {cam_num}:")
-                logging.info(f"  IP: {config['ip']}")
-                logging.info(f"  Usuario: {config['username']}")
-                logging.info(f"  Stream: {config['stream']}")
-                logging.info(f"  Ubicación: {config['location']}")
+                if str(config.get('brand', '')).lower() in ('webcam', 'local', 'usb'):
+                    logging.info(f"  Fuente: Webcam local (índice {config.get('device_index', 0)})")
+                else:
+                    logging.info(f"  IP: {config.get('ip', '')}")
+                    logging.info(f"  Usuario: {config.get('username', '')}")
+                    logging.info(f"  Stream: {config.get('stream', '')}")
+                logging.info(f"  Ubicación: {config.get('location', '')}")
 
                 # Crear instancia de DetectionTapo (sin modelo propio: usa el engine compartido)
                 detection = DetectionTapo(
