@@ -192,15 +192,17 @@ class MonitoringWindow(QMainWindow):
         
         enabled_count = len([c for c in self.cameras.values() if c.get('enabled', True)])
         
-        stats_label = QLabel(
+        # Se guarda como atributo para poder refrescarlo en tiempo real cuando
+        # se marca/desmarca cualquier checkbox de habilitación.
+        self.stats_label = QLabel(
             f"📊 Total: {total_cameras} | "
             f"✅ Habilitadas: {enabled_count} | "
             f"⚪ Deshabilitadas: {total_cameras - enabled_count}"
         )
-        stats_label.setFont(QFont("Segoe UI", 9))
-        stats_label.setStyleSheet("color: #34495e; padding: 5px;")
-        
-        stats_layout.addWidget(stats_label)
+        self.stats_label.setFont(QFont("Segoe UI", 9))
+        self.stats_label.setStyleSheet("color: #34495e; padding: 5px;")
+
+        stats_layout.addWidget(self.stats_label)
         main_layout.addLayout(stats_layout)
         
         # ==========================================
@@ -294,6 +296,32 @@ class MonitoringWindow(QMainWindow):
         self.setWindowTitle(f"Sistema Multi-Cámara ({total_cameras}) - Weapon Detection")
         self.setMinimumSize(900, window_height)
     
+    def refresh_camera_stats(self):
+        """Recalcular en tiempo real Total/Habilitadas/Deshabilitadas y el texto
+        del botón "Iniciar Sistema", leyendo el estado actual de cada checkbox.
+
+        Se invoca cada vez que se marca/desmarca un checkbox de habilitación y
+        una vez al cargar la configuración inicial.
+        """
+        try:
+            total = len(self.camera_widgets)
+            enabled = sum(
+                1 for w in self.camera_widgets.values()
+                if w['enabled'].isChecked()
+            )
+            disabled = total - enabled
+
+            if hasattr(self, 'stats_label'):
+                self.stats_label.setText(
+                    f"📊 Total: {total} | "
+                    f"✅ Habilitadas: {enabled} | "
+                    f"⚪ Deshabilitadas: {disabled}"
+                )
+            if hasattr(self, 'startButton'):
+                self.startButton.setText(f"▶️ Iniciar Sistema ({enabled} cámaras)")
+        except Exception as e:
+            logging.exception(f"Error al refrescar estadísticas de cámaras: {e}")
+
     def create_camera_tab(self, camera_key, camera_num):
         """Crear tab de configuración para una cámara individual"""
         # Crear widget principal con scroll
@@ -326,6 +354,8 @@ class MonitoringWindow(QMainWindow):
         enable_checkbox = QCheckBox(f"Habilitar Cámara {camera_num}")
         enable_checkbox.setChecked(True)
         enable_checkbox.setFont(QFont("Segoe UI", 10))
+        # Recalcular contadores y texto del botón en tiempo real al alternar.
+        enable_checkbox.stateChanged.connect(self.refresh_camera_stats)
         widgets['enabled'] = enable_checkbox
         
         status_layout.addWidget(enable_checkbox)
@@ -402,6 +432,10 @@ class MonitoringWindow(QMainWindow):
                     widgets['enabled'].setChecked(config.get('enabled', True))
 
             logging.info(f"Configuraciones cargadas para {len(self.camera_widgets)} cámara(s)")
+
+            # Reflejar el estado real (enabled) recién cargado del JSON en el
+            # resumen y en el texto del botón.
+            self.refresh_camera_stats()
 
         except Exception as e:
             logging.error(f"Error al cargar configuraciones: {e}")

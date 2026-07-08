@@ -3,6 +3,106 @@ import sys
 import os
 import logging
 import subprocess
+import faulthandler
+import threading
+import traceback
+
+# ==========================================================================
+# (1-B) FIX CRASH: OpenMP duplicado (libiomp5md.dll).
+# El .spec de producción copia las DLLs de Intel MKL + libiomp5md.dll a la
+# raíz del dist, y PyTorch trae su PROPIA copia de OpenMP. Con dos runtimes de
+# OpenMP cargados, Intel ABORTA el proceso ("OMP: Error #15 ... already
+# initialized"). Como el ejecutable es windowed (console=False), ese abort no
+# muestra mensaje: la app se cierra en silencio al ejecutar la primera
+# inferencia. Estas variables deben quedar FÍSICAMENTE ANTES de importar
+# torch/cv2/ultralytics (los imports de App.* de abajo ya los arrastran).
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+
+
+def _base_dir():
+    """Directorio base compatible con PyInstaller (frozen) y desarrollo."""
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def resource_path(relative_path):
+    """Ruta absoluta a un recurso empaquetado (UI/icon.ico, etc.).
+
+    Resuelve tanto en desarrollo como dentro del bundle de PyInstaller:
+    - frozen: sys._MEIPASS (carpeta temporal donde se extraen los datos).
+    - desarrollo: directorio de este archivo (UI/ es hermano de main.py).
+    """
+    if hasattr(sys, '_MEIPASS'):
+        base = sys._MEIPASS
+    else:
+        base = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base, relative_path)
+
+
+def resolve_data_path(relative_path):
+    """Resolver un recurso de datos (p.ej. el modelo YOLO) de forma robusta.
+
+    Usa la ruta relativa tal cual si existe respecto al cwd (comportamiento de
+    desarrollo, sin cambios). Si no existe (típico en el ejecutable empaquetado,
+    donde el cwd es el del .exe y los datos viven en el bundle), cae a
+    resource_path(). Funciona igual en PyInstaller 5 (datos en la raíz) y 6
+    (datos en _internal/). No cambia la arquitectura de inferencia.
+    """
+    if os.path.exists(relative_path):
+        return relative_path
+    bundled = resource_path(relative_path)
+    return bundled if os.path.exists(bundled) else relative_path
+
+
+# (1-A) Instrumentación para capturar CUALQUIER crash nativo futuro.
+# faulthandler vuelca el stack de C/Python ante un abort/segfault (cosa que un
+# try/except de Python NO puede interceptar) a crash_dump.log; sys/threading
+# excepthook registran cualquier excepción de Python no capturada en el log.
+# No cambia el comportamiento normal de la app.
+_crash_dump_file = None
+
+
+def _install_crash_handlers():
+    global _crash_dump_file
+    try:
+        dump_path = os.path.join(_base_dir(), 'crash_dump.log')
+        # Mantener el archivo abierto durante toda la vida del proceso: si se
+        # cierra, faulthandler no podría escribir en el momento del crash.
+        _crash_dump_file = open(dump_path, 'a', buffering=1, encoding='utf-8')
+        faulthandler.enable(file=_crash_dump_file, all_threads=True)
+    except Exception as e:
+        # Si no se puede abrir el archivo, al menos a stderr.
+        try:
+            faulthandler.enable(all_threads=True)
+        except Exception:
+            pass
+        print(f"No se pudo instalar faulthandler en archivo: {e}")
+
+    def _log_uncaught(exc_type, exc_value, exc_tb):
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc_value, exc_tb)
+            return
+        logging.exception(
+            "Excepción no capturada (hilo principal): %s",
+            exc_value,
+            exc_info=(exc_type, exc_value, exc_tb),
+        )
+
+    sys.excepthook = _log_uncaught
+
+    # threading.excepthook existe desde Python 3.8.
+    if hasattr(threading, 'excepthook'):
+        def _log_thread_uncaught(args):
+            logging.error(
+                "Excepción no capturada en hilo '%s':\n%s",
+                getattr(args.thread, 'name', '?'),
+                ''.join(traceback.format_exception(
+                    args.exc_type, args.exc_value, args.exc_traceback)),
+            )
+        threading.excepthook = _log_thread_uncaught
+
 
 # En Windows, evitar que los subprocesos (p.ej. nvidia-smi, que GPUtil invoca
 # cada pocos segundos durante la deteccion) abran ventanas de consola que parpadean.
@@ -19,6 +119,7 @@ if sys.platform.startswith('win'):
 
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtCore import QObject, QSharedMemory
+from PyQt5.QtGui import QIcon
 from App.loginWindowClass import LoginWindow
 from App.monitoringWindowClass import MonitoringWindow
 from App.detectionWindowDual import DetectionWindowDual
@@ -95,11 +196,27 @@ class MainApplication(QObject):
     def __init__(self):
         super().__init__()
         setup_logging()
-        
+        # Instalar handlers de crash DESPUÉS de configurar logging (para que el
+        # excepthook pueda registrar) pero antes de crear ventanas/hilos.
+        _install_crash_handlers()
+
         # Configurar aplicación Qt
         self.app = QApplication(sys.argv)
         self.app.setApplicationName("Weapon Detection System")
         self.app.setApplicationVersion("2.0 Multi-Camera")
+
+        # Ícono a nivel de aplicación: lo heredan TODAS las ventanas (Login,
+        # Monitoring, DetectionDual) y los QMessageBox por defecto. Antes solo
+        # el ejecutable/barra de tareas tenían logo; las ventanas mostraban el
+        # ícono genérico de Windows.
+        try:
+            icon_file = resource_path(os.path.join('UI', 'icon.ico'))
+            if os.path.exists(icon_file):
+                self.app.setWindowIcon(QIcon(icon_file))
+            else:
+                logging.warning(f"Ícono no encontrado en: {icon_file}")
+        except Exception as e:
+            logging.exception(f"No se pudo establecer el ícono de la aplicación: {e}")
         
         # Estado de la aplicación
         self.current_window = None
@@ -185,8 +302,9 @@ class MainApplication(QObject):
 
             # Crear UN motor de inferencia COMPARTIDO (carga el modelo UNA sola vez
             # para todas las cámaras, en vez de una copia por cámara).
+            model_path = resolve_data_path(GLOBAL_CONFIG['model_path'])
             self.engine = InferenceEngine(
-                GLOBAL_CONFIG['model_path'],
+                model_path,
                 conf=GLOBAL_CONFIG.get('confidence_threshold', 0.5),
                 iou=0.45,
                 max_det=GLOBAL_CONFIG.get('max_detections', 10),

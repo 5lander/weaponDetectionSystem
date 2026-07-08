@@ -194,7 +194,10 @@ class InferenceEngine:
                 # DetectionTapo solo emite señales (thread-safe) y guarda/sube.
                 callback(annotated, detections)
             except Exception as e:
-                logging.error(f"[Engine] Error procesando cámara {cid}: {e}")
+                # logging.exception conserva el traceback completo (antes solo
+                # el mensaje). Cubre TODO el path posterior a la detección:
+                # _infer + callback -> on_inference_result -> saveDetection.
+                logging.exception(f"[Engine] Error procesando cámara {cid}: {e}")
             finally:
                 with self._lock:
                     self._inflight.discard(cid)

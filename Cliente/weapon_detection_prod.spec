@@ -20,10 +20,12 @@ app_name = "WeaponDetectionSystem"
 # Datos adicionales (van a la raiz del dist en modo onedir)
 added_files = [
     ('UI/*.ui', 'UI'),
+    ('UI/icon.ico', 'UI'),   # icono de ventana en runtime (setWindowIcon), resuelto por resource_path
     ('model/last.pt', 'model'),
     ('Styles/*.py', 'Styles'),
     ('requirements*.txt', '.'),
     ('config/settings.ini', '.'),
+    ('cameras.json', '.'),
 ]
 
 # (2) CRITICO: recolectar el set completo de DLLs de Intel MKL + OpenMP
