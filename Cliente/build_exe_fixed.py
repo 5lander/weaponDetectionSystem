@@ -20,6 +20,10 @@ import sys
 import os
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
+# torch/ultralytics importan módulos muy anidados y PyInstaller topa con el
+# límite de recursión de Python (RecursionError). Subirlo es el fix oficial.
+sys.setrecursionlimit(5000)
+
 # Configuración de paths
 block_cipher = None
 app_name = "WeaponDetectionSystem"
@@ -27,7 +31,7 @@ app_name = "WeaponDetectionSystem"
 # Recopilar datos adicionales
 added_files = [
     ('UI/*.ui', 'UI'),
-    ('model/last.pt', 'model'),
+    ('model/candidate_multi.pt', 'model'),  # modelo activo (multi-clase)
     ('Styles/*.py', 'Styles'),
     ('requirements*.txt', '.'),
     ('config/settings.ini', '.'),
@@ -282,8 +286,10 @@ def verify_project_structure():
     
     required_files = [
         'main.py',
-        'App/detection.py',
-        'App/detectionWindow.py', 
+        # Nombres actualizados tras el refactor (antes detection.py/detectionWindow.py):
+        'App/detection_tapo.py',
+        'App/detectionWindowDual.py',
+        'App/inference_engine.py',
         'App/loginWindowClass.py',
         'App/monitoringWindowClass.py',
         'UI/loginWindow.ui',

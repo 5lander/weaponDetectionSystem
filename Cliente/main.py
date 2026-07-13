@@ -309,6 +309,7 @@ class MainApplication(QObject):
                 iou=0.45,
                 max_det=GLOBAL_CONFIG.get('max_detections', 10),
                 num_workers=GLOBAL_CONFIG.get('inference_workers', 1),
+                min_box_area_ratio=GLOBAL_CONFIG.get('min_box_area_ratio', 0.0),
             )
             try:
                 self.engine.start()  # ÚNICA carga del modelo

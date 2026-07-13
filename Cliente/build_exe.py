@@ -27,7 +27,7 @@ app_name = "WeaponDetectionSystem"
 # Recopilar datos adicionales
 added_files = [
     ('UI/*.ui', 'UI'),
-    ('model/last.pt', 'model'),
+    ('model/candidate_multi.pt', 'model'),  # modelo activo (multi-clase)
     ('Styles/*.py', 'Styles'),
     ('requirements*.txt', '.'),
     ('config/settings.ini', '.'),

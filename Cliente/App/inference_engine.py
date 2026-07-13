@@ -46,16 +46,31 @@ class InferenceEngine:
     _SENTINEL = object()
 
     def __init__(self, model_path, conf=0.5, iou=0.45, max_det=10,
-                 num_workers=1, metrics_csv='inference_metrics.csv'):
+                 num_workers=1, metrics_csv='inference_metrics.csv',
+                 min_box_area_ratio=0.0):
         self.model_path = model_path
         self.conf = conf
         self.iou = iou
         self.max_det = max_det
+        # Filtro anti-falsos-positivos: descarta cajas cuya área sea menor a
+        # esta fracción del área total del frame (0.0 = sin filtro).
+        self.min_box_area_ratio = max(0.0, float(min_box_area_ratio))
         self.num_workers = max(1, int(num_workers))
 
         self.model = None
         self.device = 'cpu'
-        self.colors = {0: (0, 0, 255), 1: (0, 165, 255)}
+        # Colores por clase (BGR) para candidate_multi.pt:
+        #   0 Grenade, 1 Gun, 2 Knife, 3 Pistol, 4 handgun, 5 rifle
+        # Armas de fuego en rojo, arma blanca en naranja, granada en amarillo.
+        # Clases desconocidas caen al default (azul) vía .get().
+        self.colors = {
+            0: (0, 255, 255),   # Grenade  - amarillo
+            1: (0, 0, 255),     # Gun      - rojo
+            2: (0, 165, 255),   # Knife    - naranja
+            3: (0, 0, 255),     # Pistol   - rojo
+            4: (0, 0, 255),     # handgun  - rojo
+            5: (0, 0, 255),     # rifle    - rojo
+        }
 
         # Cola central + estado compartido (protegido por _lock)
         self._jobs = Queue()
@@ -115,21 +130,29 @@ class InferenceEngine:
         logging.info("[Engine] Detenido y modelo liberado")
 
     def _detect_gpu(self):
-        # IMPORTANTE: no basta con que exista una GPU física (GPUtil/nvidia-smi);
-        # torch debe estar compilado con CUDA. Con torch CPU-only, pedir device=0
-        # hace que TODA inferencia falle ("Invalid CUDA 'device=0' requested").
+        # IMPORTANTE: no basta con que exista una GPU física (GPUtil/nvidia-smi)
+        # ni con que torch tenga CUDA. torchvision TAMBIÉN debe tener sus ops
+        # (NMS) compiladas para CUDA. Un caso real muy común: torch '+cu118' pero
+        # torchvision '+cpu' -> torchvision.ops.nms en GPU lanza
+        # NotImplementedError ("Could not run 'torchvision::nms' ... 'CUDA'") y
+        # TODA inferencia falla. Por eso probamos una NMS mínima REAL en CUDA:
+        # si funciona, usamos GPU; si no, caemos a CPU (lento pero estable).
         try:
             import torch
             if not torch.cuda.is_available():
                 return False
-        except Exception:
+            import torchvision
+            boxes = torch.tensor([[0.0, 0.0, 1.0, 1.0]], device='cuda')
+            scores = torch.tensor([0.5], device='cuda')
+            torchvision.ops.nms(boxes, scores, 0.5)  # si esto no lanza, GPU sirve
+            return True
+        except Exception as e:
+            logging.warning(
+                f"[Engine] GPU presente pero no usable para inferencia "
+                f"({type(e).__name__}: {e}). Usando CPU. "
+                f"Para GPU, alinear torchvision con la build CUDA de torch."
+            )
             return False
-        if GPUtil is None:
-            return True
-        try:
-            return len(GPUtil.getGPUs()) > 0
-        except Exception:
-            return True
 
     # ------------------------------------------------------------------ registro / envío
     def register(self, camera_id, callback):
@@ -223,11 +246,22 @@ class InferenceEngine:
             device=self.device
         )
 
+        # Área del frame para el filtro de tamaño mínimo de caja.
+        frame_area = frame.shape[0] * frame.shape[1]
+
         detected = []
         for result in results:
             for box in result.boxes:
                 conf = float(box.conf[0])
                 cls = int(box.cls[0])
+
+                # Filtro de tamaño: descartar cajas demasiado pequeñas (ruido).
+                if self.min_box_area_ratio > 0 and frame_area > 0:
+                    bx1, by1, bx2, by2 = box.xyxy[0].tolist()
+                    box_area = max(0.0, (bx2 - bx1)) * max(0.0, (by2 - by1))
+                    if (box_area / frame_area) < self.min_box_area_ratio:
+                        continue
+
                 detected.append({
                     'class': cls,
                     'confidence': conf,
