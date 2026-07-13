@@ -66,6 +66,19 @@ class DetectionTapo(QThread):
         self.last_analysis_time = 0
         self.capture_interval = 4   # Enviar detecciones cada 4 segundos
         self.last_capture_time = 0
+
+        # CONFIRMACIÓN TEMPORAL (anti-falsos-positivos) tipo "N de las últimas M":
+        # el arma debe verse en al menos N de los últimos M ciclos de análisis
+        # antes de guardar/alertar. Tolera el parpadeo de confianza del modelo
+        # (mejor que exigir frames perfectamente seguidos) y a la vez un falso
+        # positivo de un solo frame (celular, mano, sombra) no genera evidencia.
+        from .cameras_config import GLOBAL_CONFIG
+        self.confirmation_frames = max(1, int(GLOBAL_CONFIG.get('confirmation_frames', 1)))
+        self.confirmation_window = max(self.confirmation_frames,
+                                       int(GLOBAL_CONFIG.get('confirmation_window',
+                                                             self.confirmation_frames)))
+        # Ventana deslizante de resultados recientes (True=hubo detección).
+        self._recent_hits = deque(maxlen=self.confirmation_window)
         self.resource_check_interval = 10  # Verificar recursos cada 10s
         self.last_resource_check = 0
 
@@ -330,7 +343,21 @@ class DetectionTapo(QThread):
           (no toca widgets),
         - last_capture_time lo escribe solo este callback (worker único por cámara).
         """
+        # Registrar el resultado de este ciclo en la ventana deslizante.
+        # (Este callback siempre se invoca; con detecciones=hit, sin ellas=miss.)
+        self._recent_hits.append(bool(detections))
+        hits = sum(self._recent_hits)
+
         if not detections:
+            return
+
+        # Confirmación temporal "N de M": solo alertar si el arma se vio en al
+        # menos N de los últimos M ciclos. Filtra el falso positivo aislado.
+        if hits < self.confirmation_frames:
+            logging.info(
+                f"[Cámara {self.camera_id}] Detección sin confirmar "
+                f"({hits}/{self.confirmation_frames} en últimas {len(self._recent_hits)}) - se espera persistencia"
+            )
             return
 
         msg = f"[Cámara {self.camera_id}] {len(detections)} objetos detectados"

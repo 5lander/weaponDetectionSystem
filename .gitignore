@@ -39,7 +39,9 @@ Cliente/dist.rar
 Cliente/model/last.pt
 docs/
 Cliente/detections
+Cliente/diagnostico
 Cliente/inference_metrics.csv
+Cliente/eval_web
 *.pt
 *.pth
 *.h5
@@ -84,3 +86,8 @@ htmlcov/
 # IDEs y editores
 .vscode/
 .idea/
+
+#Tesis y documentaciones
+
+01_Tesis_Original_Sistema_Deteccion_Armas.docx
+CAMBIOS_A_DOCUMENTAR.md
