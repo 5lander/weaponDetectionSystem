@@ -161,6 +161,18 @@ LOGGING = {
             'level': 'INFO',
             'propagate': True,
         },
+        # Líneas de peticiones HTTP del runserver (GET/POST ... 200/500).
+        'django.server': {
+            'handlers': ['file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        # Nuestro subsistema de Web Push (webpush_sender / push_views).
+        'detection': {
+            'handlers': ['file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
     },
 }
 
