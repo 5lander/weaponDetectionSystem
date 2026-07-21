@@ -4,7 +4,6 @@ detectionWindowDual.py - VISTA ESCALABLE CON GRID DINÁMICO
 Soporta 1 a N cámaras con distribución inteligente
 """
 
-import sys
 import math
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QLabel, QPushButton,
                              QVBoxLayout, QHBoxLayout, QGridLayout, QGroupBox,

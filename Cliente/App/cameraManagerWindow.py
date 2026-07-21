@@ -7,10 +7,9 @@ Agrega, edita y elimina cámaras desde la interfaz gráfica
 import json
 import os
 from PyQt5.QtWidgets import (QDialog, QWidget, QLabel, QLineEdit, 
-                             QPushButton, QComboBox, QCheckBox, QGroupBox,
+                             QPushButton, QCheckBox, QGroupBox,
                              QVBoxLayout, QHBoxLayout, QFormLayout, QMessageBox,
-                             QListWidget, QListWidgetItem, QFrame,
-                             QDialogButtonBox, QFileDialog)
+                             QListWidget, QListWidgetItem, QDialogButtonBox, QFileDialog)
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QFont
 import logging

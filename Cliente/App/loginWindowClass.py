@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QMainWindow, QMessageBox, QLabel, QProgressBar, QFrame, QWidget
+from PyQt5.QtWidgets import QMainWindow, QMessageBox, QLabel, QProgressBar, QLineEdit, QPushButton
 from PyQt5.QtCore import pyqtSignal, QTimer, QPropertyAnimation, QEasingCurve, Qt
 from PyQt5.QtGui import QFont, QIcon
 from PyQt5.uic import loadUi
@@ -11,7 +11,7 @@ import webbrowser
 import logging
 
 # Importar los estilos desde la carpeta Styles
-from Styles.loginStyle import LoginWindowStyles, StatusIndicatorStyles
+from Styles.loginStyle import LoginWindowStyles
 
 # NO SE USA MÁS - COMENTADO
 # class StatusIndicator(QLabel):

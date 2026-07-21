@@ -1,4 +1,3 @@
-import os
 import uuid
 from django.db import models
 
@@ -9,7 +8,6 @@ from rest_framework.authtoken.models import Token
 
 from django.contrib.auth.models import User
 from webdev.storage_backends import PublicMediaStorage
-from django.conf import settings
 
 # Changes uploaded file name
 def scrambleUploadedFilename(instance, filename):
