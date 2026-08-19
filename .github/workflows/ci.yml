@@ -1,0 +1,61 @@
+name: ci
+
+# Cliente y server se validan por separado con la version de Python en la que
+# realmente corren (cliente 3.8, server 3.12). ruff (regla F) + compileall son
+# bloqueantes; el server ademas pasa `manage.py check` con env dummy (no conecta a BD).
+# No se instalan torch/PyQt/ultralytics: ruff/compileall no los necesitan.
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  client:
+    # ubuntu-22.04: Python 3.8 nativo y disponible en setup-python (evita 24.04).
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+        with:
+          python-version: '3.8'
+      - name: Install ruff
+        run: pip install ruff==0.15.22
+      - name: Lint (ruff, regla F)
+        run: ruff check Cliente --target-version py38
+      - name: Compile (sintaxis)
+        run: python -m compileall -q Cliente
+
+  server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+        with:
+          python-version: '3.12'
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff==0.15.22
+          pip install -r Server/requirements.txt
+      - name: Lint (ruff, regla F)
+        run: ruff check Server --target-version py312
+      - name: Compile (sintaxis)
+        run: python -m compileall -q Server
+      - name: Django system check
+        working-directory: Server
+        env:
+          SECRET_KEY: dummy-ci-secret-key-not-real
+          DB_NAME: dummy
+          DB_USER: dummy
+          DB_PASSWORD: dummy
+          DB_HOST: localhost
+          AWS_ACCESS_KEY_ID: dummy
+          AWS_SECRET_ACCESS_KEY: dummy
+        run: python manage.py check

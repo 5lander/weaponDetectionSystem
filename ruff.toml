@@ -1,0 +1,16 @@
+# Lint config — CI valida el codigo de la app/libreria, no las herramientas de build.
+# Regla F (pyflakes): imports sin usar, nombres indefinidos, codigo muerto.
+# target-version se pasa por job en CI (py38 cliente / py312 server).
+line-length = 120
+
+# Scripts de empaquetado PyInstaller (dev tooling, se corren a mano; con imports
+# intencionales de comprobacion de dependencias). No forman parte del runtime.
+extend-exclude = [
+    "Cliente/build_exe.py",
+    "Cliente/build_exe_fixed.py",
+    "Cliente/setup_build.py",
+    "Cliente/setup_build_fixed.py",
+]
+
+[lint]
+select = ["F"]

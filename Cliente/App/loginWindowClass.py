@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QMainWindow, QMessageBox, QLabel, QProgressBar, QFrame, QWidget
+from PyQt5.QtWidgets import QMainWindow, QMessageBox, QLabel, QProgressBar, QLineEdit, QPushButton
 from PyQt5.QtCore import pyqtSignal, QTimer, QPropertyAnimation, QEasingCurve, Qt
 from PyQt5.QtGui import QFont, QIcon
 from PyQt5.uic import loadUi
@@ -11,7 +11,7 @@ import webbrowser
 import logging
 
 # Importar los estilos desde la carpeta Styles
-from Styles.loginStyle import LoginWindowStyles, StatusIndicatorStyles
+from Styles.loginStyle import LoginWindowStyles
 
 # NO SE USA MÁS - COMENTADO
 # class StatusIndicator(QLabel):
@@ -356,7 +356,7 @@ class LoginWindow(QMainWindow):
 
     def goToRegisterPage(self):
         try:
-            webbrowser.open('https://weapondetectionsystem.onrender.com/register/')
+            webbrowser.open('https://weaponnotificationserver.onrender.com/register/')
             print("Página de registro abierta en el navegador.")
         except Exception as e:
             error_message = f"No se pudo abrir la página de registro: {str(e)}"

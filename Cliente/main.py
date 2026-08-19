@@ -172,7 +172,6 @@ def setup_logging():
         if log_handler and hasattr(log_handler, 'stream'):
             try:
                 # Para Python < 3.9, configurar encoding a nivel de sistema
-                import codecs
                 if hasattr(log_handler.stream, 'reconfigure'):
                     log_handler.stream.reconfigure(encoding='utf-8')
             except:
@@ -329,7 +328,7 @@ class MainApplication(QObject):
             self.detection_threads = {}
 
             for cam_num, config in cameras.items():
-                logging.info(f"")
+                logging.info("")
                 logging.info(f"Configurando Cámara {cam_num}:")
                 if str(config.get('brand', '')).lower() in ('webcam', 'local', 'usb'):
                     logging.info(f"  Fuente: Webcam local (índice {config.get('device_index', 0)})")
@@ -354,7 +353,7 @@ class MainApplication(QObject):
                 logging.info(f"  Thread de detección creado para Cámara {cam_num}")
             
             # Crear ventana de visualización dual
-            logging.info(f"")
+            logging.info("")
             logging.info("Creando ventana de visualización dual...")
             self.current_window = DetectionWindowDual(self.detection_threads)
             # Al volver/detener desde la ventana de detección, regresar al menú

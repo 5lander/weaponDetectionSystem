@@ -1,7 +1,7 @@
 import django_filters
 from django_filters import DateFilter, CharFilter
 
-from .models import *
+from .models import UploadAlert
 
 # Filtering
 class DetectionFilter(django_filters.FilterSet):

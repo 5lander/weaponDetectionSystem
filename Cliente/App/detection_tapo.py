@@ -475,6 +475,15 @@ class DetectionTapo(QThread):
                     'location': self.location,
                     'alertReceiver': self.receiver,
                 }
+
+                # Confianza de la deteccion mas fuerte del frame (0.0 - 1.0).
+                # El servidor la guarda en UploadAlert y la muestra en el correo.
+                try:
+                    confidences = [float(d.get('confidence', 0)) for d in (detections or [])]
+                    if confidences:
+                        data['confidence'] = round(max(confidences), 4)
+                except (TypeError, ValueError):
+                    pass
                 response = requests.post(url, files=files, data=data,
                                          headers=headers, timeout=10)
             

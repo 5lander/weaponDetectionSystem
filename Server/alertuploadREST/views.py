@@ -1,10 +1,6 @@
 from alertuploadREST.serializers import UploadAlertSerializer
 from rest_framework.response import Response
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
-from django.http import HttpResponse
-from django.core.mail import send_mail, EmailMultiAlternatives
-from rest_framework.exceptions import ValidationError
+from rest_framework.decorators import api_view
 
 from django.http import JsonResponse
 
@@ -78,7 +74,7 @@ def send_enhanced_email(serializer):
         alert_data = extract_alert_data(serializer)
 
         # Crear el correo con HTML
-        subject = f"🚨 ALERTA DE SEGURIDAD - Arma Detectada"
+        subject = "🚨 ALERTA DE SEGURIDAD - Arma Detectada"
 
         # Texto plano como respaldo
         text_content = create_text_email(alert_data)
@@ -88,7 +84,7 @@ def send_enhanced_email(serializer):
 
         receiver = serializer.data['alertReceiver']
 
-        print(f"Detalles del correo:")
+        print("Detalles del correo:")
         print(f"  Asunto: {subject}")
         print(f"  Para: {receiver}")
         print(f"  De: {settings.DEFAULT_FROM_EMAIL}")
@@ -144,7 +140,14 @@ def extract_alert_data(serializer):
     location = data.get('location', 'Ubicación no especificada')
     
     # Obtener detalles adicionales
-    confidence = data.get('confidence', 'No especificada')
+    # La confianza llega del cliente como fraccion (0.0 - 1.0) y se persiste en
+    # UploadAlert. Se muestra como porcentaje; si la alerta es anterior al campo
+    # o el cliente no lo envio, se indica que no esta disponible.
+    raw_confidence = data.get('confidence')
+    try:
+        confidence = '{:.1f}%'.format(float(raw_confidence) * 100)
+    except (TypeError, ValueError):
+        confidence = 'No disponible'
     alert_id = getattr(serializer.instance, 'id', 'N/A') if serializer.instance else 'N/A'
     
     return {

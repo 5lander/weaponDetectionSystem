@@ -1,4 +1,3 @@
-import os
 import uuid
 from django.db import models
 
@@ -9,7 +8,6 @@ from rest_framework.authtoken.models import Token
 
 from django.contrib.auth.models import User
 from webdev.storage_backends import PublicMediaStorage
-from django.conf import settings
 
 # Changes uploaded file name
 def scrambleUploadedFilename(instance, filename):
@@ -28,6 +26,9 @@ class UploadAlert(models.Model):
     userID = models.ForeignKey(Token, on_delete=models.CASCADE)
     alertReceiver = models.CharField(max_length=200)
     location = models.CharField(max_length=200)
+    # Confianza de la deteccion que origino la alerta (0.0 - 1.0). Es opcional
+    # para no romper las alertas antiguas, que se guardaron sin este dato.
+    confidence = models.FloatField("Confianza de la deteccion", null=True, blank=True)
     dateCreated = models.DateTimeField(auto_now_add=True)
 
 # Generate and save a token each time a user is saved in a database

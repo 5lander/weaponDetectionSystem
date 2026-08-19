@@ -8,11 +8,11 @@ import sys
 import os
 import json
 from PyQt5.QtWidgets import (QMainWindow, QWidget, QLabel, QLineEdit, 
-                             QPushButton, QComboBox, QCheckBox, QGroupBox,
+                             QPushButton, QCheckBox, QGroupBox,
                              QVBoxLayout, QHBoxLayout, QFormLayout, QMessageBox,
                              QTabWidget, QFrame, QScrollArea)
 from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QFont, QIcon
+from PyQt5.QtGui import QFont
 import logging
 import cv2
 
@@ -125,7 +125,7 @@ class MonitoringWindow(QMainWindow):
         
         header_layout = QVBoxLayout()
         
-        title = QLabel(f"🎥 Sistema Multi-Cámara de Detección")
+        title = QLabel("🎥 Sistema Multi-Cámara de Detección")
         title.setFont(QFont("Segoe UI", 18, QFont.Bold))
         title.setAlignment(Qt.AlignCenter)
         title.setStyleSheet("color: #2c3e50; margin: 10px;")
