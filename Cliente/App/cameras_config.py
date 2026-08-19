@@ -75,3 +75,93 @@ GLOBAL_CONFIG = {
     'display_height': 480
 }
 
+
+# ===========================================================================
+# CARGA DE config/settings.ini
+# ===========================================================================
+# GLOBAL_CONFIG define los valores por defecto. settings.ini, si existe, los
+# sobrescribe: asi se puede ajustar el comportamiento sin recompilar el .exe.
+# Solo se aplican las claves declaradas en _INI_MAP; cualquier otra se ignora.
+# Si el archivo falta o un valor esta mal escrito, se conserva el del codigo.
+
+import configparser
+import logging
+import os
+import sys
+
+# (seccion del .ini, clave del .ini) -> (clave de GLOBAL_CONFIG, conversor)
+_INI_MAP = {
+    ('Detection', 'analysis_interval'):     ('analysis_interval', float),
+    ('Detection', 'confidence_threshold'):  ('confidence_threshold', float),
+    ('Detection', 'capture_interval'):      ('capture_interval', float),
+    ('Detection', 'max_detections'):        ('max_detections', int),
+    ('Detection', 'confirmation_frames'):   ('confirmation_frames', int),
+    ('Detection', 'confirmation_window'):   ('confirmation_window', int),
+    ('Detection', 'min_box_area_ratio'):    ('min_box_area_ratio', float),
+    ('Detection', 'inference_workers'):     ('inference_workers', int),
+    ('Camera', 'default_resolution_width'): ('display_width', int),
+    ('Camera', 'default_resolution_height'):('display_height', int),
+    ('Camera', 'cameras_per_row'):          ('cameras_per_row', int),
+    ('Network', 'server_url'):              ('server_url', str),
+    ('Network', 'max_reconnect_attempts'):  ('max_reconnect_attempts', int),
+    ('Network', 'reconnect_delay'):         ('reconnect_delay', float),
+}
+
+
+def _app_dir():
+    """Carpeta base de la aplicacion, tanto en desarrollo como empaquetada."""
+    if getattr(sys, 'frozen', False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _settings_ini_path():
+    return os.path.join(_app_dir(), 'config', 'settings.ini')
+
+
+def load_settings_ini(config=None, path=None):
+    """Sobrescribe `config` con lo que declare settings.ini.
+
+    Devuelve un dict {clave: valor} con lo que se aplico, para poder registrarlo
+    en el log. Nunca lanza: ante cualquier problema deja los valores por defecto.
+    """
+    config = GLOBAL_CONFIG if config is None else config
+    path = _settings_ini_path() if path is None else path
+    aplicados = {}
+
+    if not os.path.isfile(path):
+        logging.info("settings.ini no encontrado en %s; se usan los valores por "
+                     "defecto de GLOBAL_CONFIG", path)
+        return aplicados
+
+    parser = configparser.ConfigParser(inline_comment_prefixes=('#', ';'))
+    try:
+        parser.read(path, encoding='utf-8')
+    except (configparser.Error, OSError) as exc:
+        logging.warning("No se pudo leer settings.ini (%s); se usan los valores "
+                        "por defecto", exc)
+        return aplicados
+
+    for (seccion, clave), (destino, conversor) in _INI_MAP.items():
+        if not parser.has_option(seccion, clave):
+            continue
+        crudo = parser.get(seccion, clave).strip()
+        try:
+            valor = conversor(crudo)
+        except (TypeError, ValueError):
+            logging.warning("settings.ini [%s] %s = %r no es valido; se conserva %r",
+                            seccion, clave, crudo, config.get(destino))
+            continue
+        if config.get(destino) != valor:
+            aplicados[destino] = valor
+        config[destino] = valor
+
+    if aplicados:
+        logging.info("settings.ini aplicado: %s", aplicados)
+    else:
+        logging.info("settings.ini leido sin cambios respecto a los valores por defecto")
+    return aplicados
+
+
+# Se aplica al importar el modulo, antes de que nadie consulte GLOBAL_CONFIG.
+load_settings_ini()

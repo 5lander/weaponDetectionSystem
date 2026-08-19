@@ -24,9 +24,29 @@ if not SECRET_KEY:
     raise Exception("No SECRET_KEY set in environment. Please check your .env file.")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# Se activa solo si la variable de entorno DEBUG vale 1/true/yes. En produccion
+# debe quedar apagada: con DEBUG activo Django publica en cada error el
+# traceback completo, el mapa de rutas y las rutas absolutas del servidor.
+DEBUG = os.environ.get('DEBUG', 'False').strip().lower() in ('1', 'true', 'yes', 'on')
 
-ALLOWED_HOSTS = ['weaponnotificationserver.onrender.com','0.0.0.0','127.0.0.1',]
+# Los dos dominios de Render responden a la misma aplicacion: el cliente de
+# escritorio usa 'weaponnotificationserver' para la API y abre el registro en
+# 'weapondetectionsystem'. Ambos deben estar permitidos o el segundo devuelve
+# DisallowedHost (error 500).
+ALLOWED_HOSTS = [
+    'weaponnotificationserver.onrender.com',
+    'weapondetectionsystem.onrender.com',
+    'localhost',
+    '0.0.0.0',
+    '127.0.0.1',
+]
+
+# Django 4 exige declarar los origenes de confianza para aceptar formularios
+# POST (login, registro, restablecer contrasena) servidos por HTTPS.
+CSRF_TRUSTED_ORIGINS = [
+    'https://weaponnotificationserver.onrender.com',
+    'https://weapondetectionsystem.onrender.com',
+]
 
 
 
@@ -188,51 +208,29 @@ STATICFILES_DIRS =[
 MEDIA_ROOT = 'static/images'
 
 # ==========================================
-# ✅ GMAIL SMTP EMAIL CONFIGURATION
+# BREVO API HTTP (unico canal de correo)
 # ==========================================
-# Se usa Gmail vía SMTP con una "App Password" (contraseña de aplicación).
-# Credenciales por variables de entorno (.env / Render):
-#   EMAIL_HOST_USER      = tu-correo@gmail.com
-#   EMAIL_HOST_PASSWORD  = app password de 16 caracteres (sin espacios)
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = os.environ.get('EMAIL_HOST', 'smtp.gmail.com')
-EMAIL_PORT = int(os.environ.get('EMAIL_PORT', '587'))
-EMAIL_USE_TLS = True
-EMAIL_USE_SSL = False
-EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
-# Se limpian espacios: Google muestra la app password en bloques de 4 (xxxx xxxx ...).
-EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '').replace(' ', '')
-DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER or 'noreply@weapondetection.com')
-SERVER_EMAIL = DEFAULT_FROM_EMAIL
-EMAIL_TIMEOUT = 30
-
-# ==========================================
-# ✅ BREVO API HTTP (envío real de correos)
-# ==========================================
-# Render bloquea el SMTP saliente, así que alertas y reset de contraseña se
-# envían por la API HTTP de Brevo (puerto 443). La API key empieza con 'xkeysib-'.
-# El remitente (DEFAULT_FROM_EMAIL) DEBE estar verificado en Brevo (Senders).
+# Render bloquea el SMTP saliente (puerto 587), asi que las alertas y el
+# restablecimiento de contrasena se envian por la API HTTP de Brevo sobre el
+# puerto 443 (ver detection/email_sender.py). No hay backend SMTP configurado:
+# el proyecto no usa django.core.mail en ningun punto.
+# La API key empieza con 'xkeysib-'. El remitente (DEFAULT_FROM_EMAIL) DEBE
+# estar verificado en Brevo, en la seccion Senders.
 BREVO_API_KEY = os.environ.get('BREVO_API_KEY', '')
-# Estado de la configuracion de correo: Brevo (API HTTP) es la via principal en
-# produccion (Render bloquea SMTP saliente); Gmail SMTP es el respaldo local.
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'noreply@weapondetection.com')
+SERVER_EMAIL = DEFAULT_FROM_EMAIL
+
 if BREVO_API_KEY:
     print("\n" + "="*60)
     print("[OK] BREVO API CONFIGURADA (correos via API HTTP)")
     print("="*60)
     print(f"   From Email: {DEFAULT_FROM_EMAIL}")
     print("="*60 + "\n")
-elif EMAIL_HOST_USER and EMAIL_HOST_PASSWORD:
-    print("\n" + "="*60)
-    print("[OK] GMAIL SMTP CONFIGURADO")
-    print("="*60)
-    print(f"   From Email: {DEFAULT_FROM_EMAIL}")
-    print(f"   SMTP Host: {EMAIL_HOST}:{EMAIL_PORT}")
-    print("="*60 + "\n")
 else:
     import warnings
     warnings.warn(
         "Correo no configurado: los emails no se enviaran. Agrega BREVO_API_KEY "
-        "(produccion) o EMAIL_HOST_USER y EMAIL_HOST_PASSWORD (local) a tu .env / Render.",
+        "a tu .env / Render.",
         RuntimeWarning
     )
 

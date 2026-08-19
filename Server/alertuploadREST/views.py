@@ -140,7 +140,14 @@ def extract_alert_data(serializer):
     location = data.get('location', 'Ubicación no especificada')
     
     # Obtener detalles adicionales
-    confidence = data.get('confidence', 'No especificada')
+    # La confianza llega del cliente como fraccion (0.0 - 1.0) y se persiste en
+    # UploadAlert. Se muestra como porcentaje; si la alerta es anterior al campo
+    # o el cliente no lo envio, se indica que no esta disponible.
+    raw_confidence = data.get('confidence')
+    try:
+        confidence = '{:.1f}%'.format(float(raw_confidence) * 100)
+    except (TypeError, ValueError):
+        confidence = 'No disponible'
     alert_id = getattr(serializer.instance, 'id', 'N/A') if serializer.instance else 'N/A'
     
     return {

@@ -356,7 +356,7 @@ class LoginWindow(QMainWindow):
 
     def goToRegisterPage(self):
         try:
-            webbrowser.open('https://weapondetectionsystem.onrender.com/register/')
+            webbrowser.open('https://weaponnotificationserver.onrender.com/register/')
             print("Página de registro abierta en el navegador.")
         except Exception as e:
             error_message = f"No se pudo abrir la página de registro: {str(e)}"

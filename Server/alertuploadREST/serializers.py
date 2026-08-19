@@ -6,4 +6,5 @@ class UploadAlertSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = UploadAlert
-        fields = ('pk', 'image', 'userID', 'location', 'dateCreated', 'alertReceiver')
+        fields = ('pk', 'image', 'userID', 'location', 'dateCreated', 'alertReceiver',
+                  'confidence')
