@@ -296,10 +296,12 @@ def verify_project_structure():
     
     required_files = [
         'main.py',
-        # Nombres actualizados tras el refactor (antes detection.py/detectionWindow.py):
+        # Nombres actualizados tras el refactor del cliente
+        # (antes: App/detection.py y App/detectionWindow.py).
         'App/detection_tapo.py',
         'App/detectionWindowDual.py',
         'App/inference_engine.py',
+        'App/cameras_config.py',
         'App/loginWindowClass.py',
         'App/monitoringWindowClass.py',
         'UI/loginWindow.ui',
@@ -307,6 +309,7 @@ def verify_project_structure():
         'UI/monitoringCameraWindow.ui',
         'Styles/loginStyle.py',
         'Styles/monitoringStyle.py',
+        'config/settings.ini',
         'requirementsClient.txt'
     ]
     
@@ -319,8 +322,13 @@ def verify_project_structure():
             missing_files.append(file_path)
             print(f"  ❌ {file_path} - FALTANTE")
     
-    # Verificar modelo YOLO
-    model_path = 'model/last.pt'
+    # Verificar modelo YOLO. El activo es el que carga GLOBAL_CONFIG
+    # (model/candidate_multi.pt); last.pt quedo como respaldo.
+    model_path = 'model/candidate_multi.pt'
+    respaldo = 'model/last.pt'
+    if os.path.exists(respaldo):
+        print("  ✅ %s (respaldo, %.1f MB)" % (
+            respaldo, os.path.getsize(respaldo) / (1024 * 1024)))
     if os.path.exists(model_path):
         model_size = os.path.getsize(model_path) / (1024 * 1024)  # MB
         print(f"  ✅ {model_path} ({model_size:.1f} MB)")
