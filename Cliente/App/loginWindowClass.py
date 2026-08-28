@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import QMainWindow, QMessageBox, QLabel, QProgressBar, QLineEdit, QPushButton
-from PyQt5.QtCore import pyqtSignal, QTimer, QPropertyAnimation, QEasingCurve, Qt
+from PyQt5.QtCore import pyqtSignal, QTimer, QPropertyAnimation, QEasingCurve, Qt, QThread
 from PyQt5.QtGui import QFont, QIcon
 from PyQt5.uic import loadUi
 import requests
@@ -27,6 +27,54 @@ from Styles.loginStyle import LoginWindowStyles
 #         self.status = status
 #         style = StatusIndicatorStyles.get_status_style(status)
 #         self.setStyleSheet(style)
+
+def _api_base():
+    """URL base de la API, derivada de server_url (settings.ini).
+
+    Asi el servidor se cambia en UN solo sitio: antes el login, la subida de
+    alertas y el registro tenian cada uno su URL escrita a mano, y editar
+    settings.ini no afectaba a ninguno de los tres.
+    """
+    try:
+        from .cameras_config import GLOBAL_CONFIG
+        url = str(GLOBAL_CONFIG.get('server_url', '') or '')
+        if '/api/' in url:
+            return url.split('/api/')[0] + '/api/'
+    except Exception:
+        pass
+    return 'https://weaponnotificationserver.onrender.com/api/'
+
+
+class _LoginWorker(QThread):
+    """Hace la peticion de login FUERA del hilo de la interfaz.
+
+    El servidor corre en el plan gratuito de Render, que apaga la instancia tras
+    un rato sin trafico; el primer intento tras ese apagado tarda ~30-60 s en
+    responder (arranque en frio). Antes la peticion era sincrona con timeout de
+    10 s, asi que el primer login SIEMPRE fallaba con "el servidor no respondio".
+    Ahora corre en su propio hilo (la ventana no se congela) y espera hasta 90 s
+    de lectura, que cubre el arranque en frio.
+    """
+
+    terminado = pyqtSignal(object, object)  # (respuesta, excepcion)
+
+    def __init__(self, url, username, password, parent=None):
+        super(_LoginWorker, self).__init__(parent)
+        self._url = url
+        self._username = username
+        self._password = password
+
+    def run(self):
+        try:
+            respuesta = requests.post(
+                self._url,
+                data={'username': self._username, 'password': self._password},
+                timeout=(10, 90),
+            )
+            self.terminado.emit(respuesta, None)
+        except Exception as exc:
+            self.terminado.emit(None, exc)
+
 
 class LoginWindow(QMainWindow):
     loginSuccessful = pyqtSignal(str)
@@ -224,56 +272,70 @@ class LoginWindow(QMainWindow):
     #         self.status_label.setText("Server offline")
 
     def login(self):
-        """Método de login original con mejoras visuales"""
+        """Inicia el login. La peticion va en un hilo aparte (ver _LoginWorker)."""
         username = self.usernameInput.text()
         password = self.passwordInput.text()
 
         if not username or not password:
-            self.showErrorMessage("Campos vacíos", "Por favor, ingrese tanto el nombre de usuario como la contraseña.")
+            self.showErrorMessage("Campos vacios", "Por favor, ingrese tanto el nombre de usuario como la contrasena.")
             return
 
-        # Añadir indicadores visuales de progreso
+        # Evitar dos peticiones simultaneas si se pulsa Enter varias veces.
+        if getattr(self, '_login_worker', None) is not None and self._login_worker.isRunning():
+            return
+
         self.start_login_animation()
 
-        try:
-            url = 'https://weaponnotificationserver.onrender.com/api/get_auth_token/'
-            response = requests.post(url, data={'username': username, 'password': password}, timeout=10)
+        url = _api_base() + 'get_auth_token/'
+        self._login_worker = _LoginWorker(url, username, password, self)
+        self._login_worker.terminado.connect(self._on_login_terminado)
+        self._login_worker.start()
 
-            if response.ok:
-                try:
-                    json_response = response.json()
-                    if 'token' in json_response:
-                        self.login_success_animation()
-                        self.loginSuccessful.emit(json_response['token'])
-                        self.close()
-                    else:
-                        self.stop_login_animation()
-                        self.showErrorMessage("Error de inicio de sesión", "La respuesta del servidor no contiene un token.")
-                except json.JSONDecodeError:
-                    self.stop_login_animation()
-                    self.showErrorMessage("Error de respuesta", "No se pudo decodificar la respuesta del servidor.")
+    def _on_login_terminado(self, response, error):
+        """Procesa el resultado del login. Corre ya en el hilo de la interfaz."""
+        self._login_worker = None
+
+        if error is not None:
+            self.stop_login_animation()
+            if isinstance(error, requests.exceptions.Timeout):
+                self.showErrorMessage(
+                    "Tiempo de espera agotado",
+                    "El servidor no respondio a tiempo. Por favor, intentelo de nuevo.")
+            elif isinstance(error, requests.exceptions.ConnectionError):
+                self.showErrorMessage(
+                    "Error de conexion",
+                    "No se pudo conectar al servidor. Verifique su conexion a internet "
+                    "y que el servidor este en funcionamiento.")
+            else:
+                mensaje = "Ocurrio un error inesperado: %s" % error
+                self.showErrorMessage("Error inesperado", mensaje)
+                logging.error(mensaje, exc_info=error)
+            return
+
+        if response.ok:
+            try:
+                json_response = response.json()
+            except (json.JSONDecodeError, ValueError):
+                self.stop_login_animation()
+                self.showErrorMessage("Error de respuesta",
+                                      "No se pudo decodificar la respuesta del servidor.")
+                return
+
+            if 'token' in json_response:
+                self.login_success_animation()
+                self.loginSuccessful.emit(json_response['token'])
+                self.close()
             else:
                 self.stop_login_animation()
-                error_message = f"Error de inicio de sesión. Código de estado: {response.status_code}"
-                if response.text:
-                    error_message += f"\nRespuesta del servidor: {response.text}"
-                self.showErrorMessage("Error de inicio de sesión", error_message)
+                self.showErrorMessage("Error de inicio de sesion",
+                                      "La respuesta del servidor no contiene un token.")
+            return
 
-        except requests.exceptions.Timeout:
-            self.stop_login_animation()
-            self.showErrorMessage("Tiempo de espera agotado", "El servidor no respondió a tiempo. Por favor, inténtelo de nuevo más tarde.")
-        except requests.exceptions.ConnectionError:
-            self.stop_login_animation() 
-            # LÍNEAS COMENTADAS - YA NO ACTUALIZAN EL INDICADOR DE ESTADO
-            # self.status_indicator.set_status("error")
-            # self.status_label.setText("Connection failed")
-            self.showErrorMessage("Error de conexión", "No se pudo conectar al servidor. Verifique su conexión a internet y que el servidor esté en funcionamiento.")
-        except Exception as e:
-            self.stop_login_animation()
-            error_message = f"Ocurrió un error inesperado: {str(e)}\n\n"
-            error_message += traceback.format_exc()
-            self.showErrorMessage("Error inesperado", error_message)
-            logging.error(error_message)
+        self.stop_login_animation()
+        error_message = "Error de inicio de sesion. Codigo de estado: %s" % response.status_code
+        if response.text:
+            error_message += "\nRespuesta del servidor: %s" % response.text
+        self.showErrorMessage("Error de inicio de sesion", error_message)
 
     def start_login_animation(self):
         """Inicia animación de login"""
@@ -356,7 +418,7 @@ class LoginWindow(QMainWindow):
 
     def goToRegisterPage(self):
         try:
-            webbrowser.open('https://weaponnotificationserver.onrender.com/register/')
+            webbrowser.open(_api_base().rsplit('/api/', 1)[0] + '/register/')
             print("Página de registro abierta en el navegador.")
         except Exception as e:
             error_message = f"No se pudo abrir la página de registro: {str(e)}"

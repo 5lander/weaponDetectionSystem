@@ -39,7 +39,7 @@ def _here():
     return os.path.dirname(os.path.abspath(__file__))
 
 
-MODEL_PATH = os.path.join(_here(), "model", "last.pt")
+MODEL_PATH = os.path.join(_here(), "model", "lastv2.pt")
 OUT_DIR = os.path.join(_here(), "diagnostico")
 
 CONF_DIAG = 0.15   # umbral BAJO a propósito: queremos ver TODO lo que ve el modelo
@@ -48,9 +48,9 @@ IOU = 0.45
 
 def main():
     # Argumentos flexibles: cualquier token .pt = modelo; números = cam y umbral.
-    #   python diagnose_weapon.py                          -> last.pt, cam 0
-    #   python diagnose_weapon.py model/candidate_multi.pt -> probar otro modelo
-    #   python diagnose_weapon.py model/candidate_multi.pt 1 0.25
+    #   python diagnose_weapon.py                          -> lastv2.pt, cam 0
+    #   python diagnose_weapon.py model/last.pt            -> probar otro modelo
+    #   python diagnose_weapon.py model/last.pt 1 0.25
     model_path = MODEL_PATH
     nums = []
     for a in sys.argv[1:]:

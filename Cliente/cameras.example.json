@@ -1,0 +1,25 @@
+{
+    "camera_1": {
+        "name": "Webcam local (demostracion)",
+        "location": "Equipo local",
+        "enabled": true,
+        "brand": "webcam",
+        "device_index": 0,
+        "scene": "closeup"
+    },
+    "camera_2": {
+        "name": "Camara IP de ejemplo",
+        "location": "Ejemplo: Entrada principal",
+        "enabled": false,
+        "brand": "tapo",
+        "ip": "192.168.0.100",
+        "port": 554,
+        "username": "usuario_ejemplo",
+        "password": "contrasena_ejemplo",
+        "channel": 1,
+        "quality": "main",
+        "stream": "stream1",
+        "path": "",
+        "scene": "outdoor"
+    }
+}

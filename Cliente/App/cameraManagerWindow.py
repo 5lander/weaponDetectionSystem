@@ -6,8 +6,8 @@ Agrega, edita y elimina cámaras desde la interfaz gráfica
 
 import json
 import os
-from PyQt5.QtWidgets import (QDialog, QWidget, QLabel, QLineEdit, 
-                             QPushButton, QCheckBox, QGroupBox,
+from PyQt5.QtWidgets import (QDialog, QWidget, QLabel, QLineEdit,
+                             QPushButton, QCheckBox, QGroupBox, QComboBox,
                              QVBoxLayout, QHBoxLayout, QFormLayout, QMessageBox,
                              QListWidget, QListWidgetItem, QDialogButtonBox, QFileDialog)
 from PyQt5.QtCore import Qt, pyqtSignal
@@ -17,6 +17,10 @@ import cv2
 
 from .rtsp_fields import RtspFieldsGroup
 from . import rtsp_profiles as profiles
+from .cameras_config import SCENE_PROFILES, DEFAULT_SCENE
+
+# Orden en el que se ofrecen los escenarios en el desplegable.
+SCENE_ORDER = ['closeup', 'indoor', 'outdoor', 'custom']
 
 
 class AddCameraDialog(QDialog):
@@ -64,6 +68,20 @@ class AddCameraDialog(QDialog):
         self.location_input.setMinimumHeight(35)
         form_layout.addRow("📍 Ubicación:", self.location_input)
 
+        # Escenario: define qué tamaño puede tener un arma en el encuadre.
+        # Es el filtro que evita, por ejemplo, que un auto entero se tome por un
+        # cuchillo en una cámara de calle.
+        self.scene_combo = QComboBox()
+        for clave in SCENE_ORDER:
+            self.scene_combo.addItem(SCENE_PROFILES[clave][0])
+        self.scene_combo.setMinimumHeight(35)
+        self.scene_combo.setToolTip(
+            "A qué distancia vigila esta cámara. El sistema descarta las\n"
+            "detecciones cuyo tamaño sea imposible para un arma a esa distancia:\n"
+            "así un auto o un muro no se confunden con un cuchillo."
+        )
+        form_layout.addRow("🎯 Escenario:", self.scene_combo)
+
         # Habilitada
         self.enabled_check = QCheckBox("Habilitar esta cámara")
         self.enabled_check.setChecked(True)
@@ -110,6 +128,12 @@ class AddCameraDialog(QDialog):
         self.name_input.setText(self.camera_data.get('name', ''))
         self.location_input.setText(self.camera_data.get('location', ''))
         self.enabled_check.setChecked(self.camera_data.get('enabled', True))
+
+        escenario = str(self.camera_data.get('scene', '') or '').lower()
+        if escenario not in SCENE_ORDER:
+            escenario = DEFAULT_SCENE
+        self.scene_combo.setCurrentIndex(SCENE_ORDER.index(escenario))
+
         self.fields.set_config(self.camera_data)
 
     def test_connection(self):
@@ -206,12 +230,20 @@ class AddCameraDialog(QDialog):
         self.accept()
 
     def get_camera_data(self):
-        """Obtener datos de la cámara (identificación + conexión RTSP)."""
-        data = {
+        """Obtener datos de la cámara (identificación + escenario + conexión RTSP).
+
+        Se parte de la configuración EXISTENTE en vez de construir un diccionario
+        nuevo: así las claves que el formulario no edita (device_index de una
+        webcam, ajustes finos de tamaño de caja) sobreviven a una edición, en
+        lugar de perderse al guardar.
+        """
+        data = dict(self.camera_data or {})
+        data.update({
             'name': self.name_input.text(),
             'location': self.location_input.text(),
             'enabled': self.enabled_check.isChecked(),
-        }
+            'scene': SCENE_ORDER[self.scene_combo.currentIndex()],
+        })
         data.update(self.fields.get_config())
         return data
 
@@ -225,7 +257,8 @@ class CameraManagerWindow(QDialog):
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.config_file = 'cameras.json'
+        from .cameras_config import cameras_json_path
+        self.config_file = cameras_json_path()
         self.cameras = self.load_cameras()
         
         self.setupUI()
@@ -351,10 +384,12 @@ class CameraManagerWindow(QDialog):
         self.detail_user = QLabel("---")
         self.detail_location = QLabel("---")
         self.detail_stream = QLabel("---")
+        self.detail_scene = QLabel("---")
         self.detail_status = QLabel("---")
 
         for label in [self.detail_name, self.detail_brand, self.detail_ip, self.detail_user,
-                      self.detail_location, self.detail_stream, self.detail_status]:
+                      self.detail_location, self.detail_stream, self.detail_scene,
+                      self.detail_status]:
             label.setFont(QFont("Segoe UI", 10))
             label.setWordWrap(True)
 
@@ -364,6 +399,7 @@ class CameraManagerWindow(QDialog):
         details_layout.addRow("👤 Usuario:", self.detail_user)
         details_layout.addRow("📍 Ubicación:", self.detail_location)
         details_layout.addRow("📺 Calidad:", self.detail_stream)
+        details_layout.addRow("🎯 Escenario:", self.detail_scene)
         details_layout.addRow("✅ Estado:", self.detail_status)
         
         self.details_group.setLayout(details_layout)
@@ -479,7 +515,11 @@ class CameraManagerWindow(QDialog):
         """Actualizar lista de cámaras"""
         self.camera_list.clear()
         
-        for key in sorted(self.cameras.keys(), key=lambda x: int(x.split('_')[1])):
+        # Orden por numero de camara; las claves no numericas van al final,
+        # en orden alfabetico, en vez de reventar el gestor entero.
+        from .cameras_config import camera_key_number
+        for key in sorted(self.cameras.keys(),
+                          key=lambda x: (camera_key_number(x, 10 ** 6), str(x))):
             cam = self.cameras[key]
             enabled = "✅" if cam.get('enabled', True) else "⚪"
             item_text = f"{enabled} {cam.get('name', 'Sin nombre')} - {cam.get('ip', 'Sin IP')}"
@@ -510,6 +550,12 @@ class CameraManagerWindow(QDialog):
             "Principal (alta calidad)" if quality == 'main' else "Secundaria (baja calidad)"
         )
 
+        from .cameras_config import scene_label, box_area_limits
+        minimo, maximo = box_area_limits(cam)
+        self.detail_scene.setText(
+            "%s  (caja %.3f%% a %.1f%%)" % (scene_label(cam.get('scene')), minimo * 100, maximo * 100)
+        )
+
         enabled = cam.get('enabled', True)
         self.detail_status.setText("✅ Habilitada" if enabled else "⚪ Deshabilitada")
     
@@ -519,7 +565,8 @@ class CameraManagerWindow(QDialog):
         
         if dialog.exec_() == QDialog.Accepted:
             # Encontrar próximo número
-            existing_nums = [int(k.split('_')[1]) for k in self.cameras.keys()]
+            from .cameras_config import camera_key_number
+            existing_nums = [camera_key_number(k) for k in self.cameras.keys()]
             next_num = max(existing_nums) + 1 if existing_nums else 1
             
             key = f'camera_{next_num}'
@@ -576,7 +623,8 @@ class CameraManagerWindow(QDialog):
             
             # Limpiar detalles
             for label in [self.detail_name, self.detail_brand, self.detail_ip, self.detail_user,
-                          self.detail_location, self.detail_stream, self.detail_status]:
+                          self.detail_location, self.detail_stream, self.detail_scene,
+                          self.detail_status]:
                 label.setText("---")
     
     def test_selected_camera(self):
