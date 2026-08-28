@@ -25,23 +25,12 @@ def postAlert(request):
         serializer.save()
         print(f"Alerta guardada exitosamente. Datos: {serializer.data}")
         send_email_alert(serializer)
-        # 🔔 Notificación Web Push al dueño de la alerta (en segundo plano)
-        send_web_push(serializer.instance)
 
     else:
         print(f"La validación del serializador falló: {serializer.errors}")
         return JsonResponse({'error':'¡No se pudieron procesar los datos!'},status=400)
 
     return Response(request.META.get('HTTP_AUTHORIZATION'))
-
-# Envía la notificación web push sin bloquear la respuesta HTTP
-@start_new_thread
-def send_web_push(alert_instance):
-    try:
-        from detection.webpush_sender import notify_alert_owner
-        notify_alert_owner(alert_instance)
-    except Exception as e:
-        print(f"Error al enviar notificación web push: {e}")
 
 # Validación de correo electrónico (el cliente solo admite correo).
 EMAIL_REGEX = re.compile(r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$')

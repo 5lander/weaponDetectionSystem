@@ -40,9 +40,3 @@ cryptography==43.0.1
 
 # JWT
 PyJWT==2.9.0
-
-# Web Push (opcional - comenta si no usas)
-django-webpush==0.3.6
-py-vapid==1.9.1
-pywebpush==2.0.0
-http-ece==1.2.1
