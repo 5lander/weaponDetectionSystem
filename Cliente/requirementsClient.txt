@@ -41,8 +41,19 @@ seaborn==0.13.2
 six==1.16.0
 sympy==1.13.1
 tbb==2021.13.0
-torch==2.3.1
-torchvision==0.18.1
+# ---------------------------------------------------------------------------
+# torch / torchvision: LAS DOS deben venir de la MISMA build CUDA (cu118).
+# Si torchvision se instala desde PyPI queda en +cpu y, aunque torch tenga
+# CUDA, torchvision.ops.nms falla en GPU con:
+#   NotImplementedError: Could not run 'torchvision::nms' ... 'CUDA' backend
+# El motor lo detecta y cae a CPU (no crashea), pero la inferencia pasa de
+# ~32 ms a ~830 ms por frame (26x mas lento). Instalar asi:
+#
+#   pip install --index-url https://download.pytorch.org/whl/cu118
+#       torch==2.3.1+cu118 torchvision==0.18.1+cu118
+# ---------------------------------------------------------------------------
+torch==2.3.1+cu118
+torchvision==0.18.1+cu118
 tqdm==4.66.4
 typing_extensions==4.12.2
 tzdata==2024.1

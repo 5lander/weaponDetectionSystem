@@ -47,19 +47,29 @@ class InferenceEngine:
 
     def __init__(self, model_path, conf=0.5, iou=0.45, max_det=10,
                  num_workers=1, metrics_csv='inference_metrics.csv',
-                 min_box_area_ratio=0.0):
+                 min_box_area_ratio=0.0, max_box_area_ratio=1.0):
         self.model_path = model_path
         self.conf = conf
         self.iou = iou
         self.max_det = max_det
-        # Filtro anti-falsos-positivos: descarta cajas cuya área sea menor a
-        # esta fracción del área total del frame (0.0 = sin filtro).
+        # VENTANA DE TAMAÑO DE CAJA (filtro anti-falsos-positivos). Se descarta
+        # toda caja cuya área, como fracción del área del frame, quede fuera de
+        # [min, max]:
+        #   - por debajo del mínimo: motas de ruido de pocos píxeles.
+        #   - por encima del máximo: objetos demasiado grandes para ser un arma.
+        #     Caso real medido: una cámara de calle clasificaba AUTOS enteros
+        #     como 'Knife' con confianza 0.86, con cajas del 8% al 38% del
+        #     encuadre. El umbral de confianza no los separa (superan a las
+        #     armas reales); el tamaño sí.
+        # Estos son los valores POR DEFECTO; cada cámara puede fijar los suyos
+        # al registrarse, porque la escala depende de su geometría.
         self.min_box_area_ratio = max(0.0, float(min_box_area_ratio))
+        self.max_box_area_ratio = float(max_box_area_ratio) if max_box_area_ratio else 1.0
         self.num_workers = max(1, int(num_workers))
 
         self.model = None
         self.device = 'cpu'
-        # Colores por clase (BGR) para candidate_multi.pt:
+        # Colores por clase (BGR) para lastv2.pt:
         #   0 Grenade, 1 Gun, 2 Knife, 3 Pistol, 4 handgun, 5 rifle
         # Armas de fuego en rojo, arma blanca en naranja, granada en amarillo.
         # Clases desconocidas caen al default (azul) vía .get().
@@ -76,6 +86,7 @@ class InferenceEngine:
         self._jobs = Queue()
         self._latest = {}        # camera_id -> (frame, submit_time)
         self._callbacks = {}     # camera_id -> callable(annotated_frame, detections)
+        self._area_limits = {}   # camera_id -> (min_area_ratio, max_area_ratio)
         self._pending = set()    # camera_ids encolados y aún sin tomar (evita duplicados)
         self._inflight = set()   # camera_ids que un worker está procesando AHORA
         self._lock = threading.Lock()
@@ -155,19 +166,39 @@ class InferenceEngine:
             return False
 
     # ------------------------------------------------------------------ registro / envío
-    def register(self, camera_id, callback):
-        """Registrar el callback de una cámara. Garantiza que esa cámara recibirá sus resultados."""
+    def register(self, camera_id, callback, min_box_area_ratio=None,
+                 max_box_area_ratio=None):
+        """Registrar el callback de una cámara. Garantiza que esa cámara recibirá sus resultados.
+
+        min/max_box_area_ratio: ventana de tamaño de caja propia de ESTA cámara.
+        Si se omiten se usan los valores por defecto del motor. Son por cámara
+        porque el tamaño que ocupa un arma en el encuadre depende de la
+        geometría: en una webcam a 1 m ocupa el 3%-25%, y en una cámara de calle
+        a 12 m, el 0.03% (donde un auto ocupa el 8%-14%).
+        """
+        minimo = self.min_box_area_ratio if min_box_area_ratio is None else max(0.0, float(min_box_area_ratio))
+        maximo = self.max_box_area_ratio if max_box_area_ratio is None else float(max_box_area_ratio)
+        if maximo <= 0:
+            maximo = 1.0
+        if minimo >= maximo:
+            logging.warning(f"[Engine] Cámara {camera_id}: límites de tamaño incoherentes "
+                            f"(min={minimo} >= max={maximo}); se ignora el mínimo")
+            minimo = 0.0
+
         with self._lock:
             self._callbacks[camera_id] = callback
+            self._area_limits[camera_id] = (minimo, maximo)
         with self._metrics_lock:
             self._metrics.setdefault(camera_id, {'infer': [], 'queue': [], 'count': 0})
-        logging.info(f"[Engine] Cámara {camera_id} registrada")
+        logging.info(f"[Engine] Cámara {camera_id} registrada "
+                     f"(tamaño de caja admitido: {minimo * 100:.3f}% a {maximo * 100:.1f}% del encuadre)")
 
     def unregister(self, camera_id):
         """Quitar una cámara (al detenerla) para no entregarle resultados ya muerta."""
         with self._lock:
             self._callbacks.pop(camera_id, None)
             self._latest.pop(camera_id, None)
+            self._area_limits.pop(camera_id, None)
             self._pending.discard(camera_id)
         logging.info(f"[Engine] Cámara {camera_id} dada de baja")
 
@@ -206,11 +237,13 @@ class InferenceEngine:
                 # Reservar la cámara: solo UN worker la procesa a la vez.
                 self._inflight.add(cid)
                 frame, submit_time = item
+                area_limits = self._area_limits.get(
+                    cid, (self.min_box_area_ratio, self.max_box_area_ratio))
 
             queue_wait = time.time() - submit_time
             t0 = time.time()
             try:
-                annotated, detections = self._infer(frame)
+                annotated, detections = self._infer(frame, area_limits, cid)
                 infer_time = time.time() - t0
                 self._record_metrics(cid, infer_time, queue_wait)
                 # El callback corre en el hilo del worker (NO en el hilo Qt).
@@ -234,8 +267,12 @@ class InferenceEngine:
 
         logging.info(f"[Engine] Worker detenido: {threading.current_thread().name}")
 
-    def _infer(self, frame):
-        """Inferencia YOLO + dibujo de recuadros. Device cacheado (no GPUtil por frame)."""
+    def _infer(self, frame, area_limits=None, camera_id=None):
+        """Inferencia YOLO + dibujo de recuadros. Device cacheado (no GPUtil por frame).
+
+        area_limits: (min, max) como fracción del área del frame. Toda caja
+        fuera de esa ventana se descarta: ni se anota ni cuenta como detección.
+        """
         results = self.model(
             frame,
             verbose=False,
@@ -246,8 +283,11 @@ class InferenceEngine:
             device=self.device
         )
 
-        # Área del frame para el filtro de tamaño mínimo de caja.
+        # Área del frame para el filtro de tamaño de caja.
         frame_area = frame.shape[0] * frame.shape[1]
+        if area_limits is None:
+            area_limits = (self.min_box_area_ratio, self.max_box_area_ratio)
+        min_area, max_area = area_limits
 
         detected = []
         for result in results:
@@ -255,11 +295,19 @@ class InferenceEngine:
                 conf = float(box.conf[0])
                 cls = int(box.cls[0])
 
-                # Filtro de tamaño: descartar cajas demasiado pequeñas (ruido).
-                if self.min_box_area_ratio > 0 and frame_area > 0:
+                # FILTRO DE TAMAÑO: descartar las cajas fuera de la ventana
+                # admitida para esta cámara (ruido por debajo, objetos
+                # imposiblemente grandes por encima: autos, muros, vehículos).
+                if frame_area > 0 and (min_area > 0 or max_area < 1.0):
                     bx1, by1, bx2, by2 = box.xyxy[0].tolist()
                     box_area = max(0.0, (bx2 - bx1)) * max(0.0, (by2 - by1))
-                    if (box_area / frame_area) < self.min_box_area_ratio:
+                    ratio = box_area / frame_area
+                    if ratio < min_area or ratio > max_area:
+                        logging.debug(
+                            "[Engine] cam=%s descartada caja %s conf=%.2f por "
+                            "tamaño: %.3f%% del encuadre (admitido %.3f%%-%.1f%%)",
+                            camera_id, self.model.names.get(cls, cls), conf,
+                            ratio * 100, min_area * 100, max_area * 100)
                         continue
 
                 detected.append({

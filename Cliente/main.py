@@ -145,12 +145,19 @@ def setup_logging():
         
         log_file = os.path.join(application_path, 'app_log.log')
         
-        # Configurar logging sin el parámetro encoding para compatibilidad
+        # force=True es IMPRESCINDIBLE aqui. App.cameras_config emite logs al
+        # importarse (load_settings_ini() corre a nivel de modulo), y esa primera
+        # llamada a logging.info() instala un handler por defecto en el logger
+        # raiz. A partir de ese momento basicConfig() NO HACE NADA si no se le
+        # pasa force: el archivo app_log.log no llegaba a crearse nunca y la
+        # aplicacion se quedaba sin rastro para diagnosticar. force=True descarta
+        # los handlers previos y aplica de verdad esta configuracion.
         logging.basicConfig(
-            filename=log_file, 
+            filename=log_file,
             level=logging.INFO,
             format='%(asctime)s - %(levelname)s - %(message)s',
-            filemode='a'
+            filemode='a',
+            force=True,
         )
         
         # También logging a consola para desarrollo
@@ -189,12 +196,36 @@ def setup_logging():
         )
         logging.error(f"No se pudo configurar archivo de log. Usando consola. Error: {e}")
 
+def _log_configuracion_efectiva():
+    """Registrar en el log la configuracion REALMENTE en uso al arrancar.
+
+    App.cameras_config lee settings.ini al IMPORTARSE, es decir antes de que
+    setup_logging() exista, asi que sus mensajes no llegan a app_log.log. Sin
+    esto no habia forma de saber, mirando el log, si el ejecutable habia leido
+    settings.ini o estaba corriendo con los valores por defecto del codigo.
+    """
+    try:
+        from App.cameras_config import GLOBAL_CONFIG, _settings_ini_path
+        ruta = _settings_ini_path()
+        logging.info("settings.ini: %s (%s)",
+                     ruta, "leido" if os.path.isfile(ruta) else "NO ENCONTRADO")
+        for clave in ('model_path', 'confidence_threshold', 'analysis_interval',
+                      'capture_interval', 'confirmation_frames',
+                      'confirmation_window', 'min_box_area_ratio',
+                      'max_box_area_ratio', 'inference_workers', 'server_url'):
+            logging.info("  config efectiva | %-22s = %s", clave,
+                         GLOBAL_CONFIG.get(clave))
+    except Exception as exc:
+        logging.warning("No se pudo registrar la configuracion efectiva: %s", exc)
+
+
 class MainApplication(QObject):
     """Aplicación principal optimizada con soporte multi-cámara"""
     
     def __init__(self):
         super().__init__()
         setup_logging()
+        _log_configuracion_efectiva()
         # Instalar handlers de crash DESPUÉS de configurar logging (para que el
         # excepthook pueda registrar) pero antes de crear ventanas/hilos.
         _install_crash_handlers()
@@ -309,6 +340,7 @@ class MainApplication(QObject):
                 max_det=GLOBAL_CONFIG.get('max_detections', 10),
                 num_workers=GLOBAL_CONFIG.get('inference_workers', 1),
                 min_box_area_ratio=GLOBAL_CONFIG.get('min_box_area_ratio', 0.0),
+                max_box_area_ratio=GLOBAL_CONFIG.get('max_box_area_ratio', 1.0),
             )
             try:
                 self.engine.start()  # ÚNICA carga del modelo

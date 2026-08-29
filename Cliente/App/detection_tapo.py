@@ -72,7 +72,17 @@ class DetectionTapo(QThread):
         # antes de guardar/alertar. Tolera el parpadeo de confianza del modelo
         # (mejor que exigir frames perfectamente seguidos) y a la vez un falso
         # positivo de un solo frame (celular, mano, sombra) no genera evidencia.
-        from .cameras_config import GLOBAL_CONFIG
+        from .cameras_config import GLOBAL_CONFIG, box_area_limits, scene_label
+
+        # Ventana de tamaño de caja propia de esta cámara (según su escenario).
+        # Se resuelve aquí, una sola vez, y se entrega al motor al registrarse.
+        self.min_box_area_ratio, self.max_box_area_ratio = box_area_limits(camera_config)
+        logging.info(
+            f"[Cámara {camera_id}] Escenario: {scene_label(camera_config.get('scene'))} "
+            f"-> caja admitida {self.min_box_area_ratio * 100:.3f}% a "
+            f"{self.max_box_area_ratio * 100:.1f}% del encuadre"
+        )
+
         self.confirmation_frames = max(1, int(GLOBAL_CONFIG.get('confirmation_frames', 1)))
         self.confirmation_window = max(self.confirmation_frames,
                                        int(GLOBAL_CONFIG.get('confirmation_window',
@@ -123,8 +133,15 @@ class DetectionTapo(QThread):
 
         # Registrar esta cámara en el motor de inferencia compartido para
         # recibir SIEMPRE los resultados de sus propias capturas (por camera_id).
+        # Se le pasan los límites de tamaño de caja de ESTA cámara (según su
+        # escenario), porque el tamaño que ocupa un arma en el encuadre depende
+        # de la distancia a la que está colocada.
         if self.engine:
-            self.engine.register(self.camera_id, self.on_inference_result)
+            self.engine.register(
+                self.camera_id, self.on_inference_result,
+                min_box_area_ratio=self.min_box_area_ratio,
+                max_box_area_ratio=self.max_box_area_ratio,
+            )
 
         # Iniciar SOLO el thread de captura (el análisis lo hace el engine)
         self._start_capture_thread()
@@ -463,7 +480,13 @@ class DetectionTapo(QThread):
     def _upload_to_server(self, filepath, detections):
         """Subir detección al servidor"""
         try:
-            url = 'https://weaponnotificationserver.onrender.com/api/images/'
+            # URL del servidor: la que declare settings.ini / GLOBAL_CONFIG.
+            # Antes estaba hardcodeada aqui, asi que editar settings.ini no tenia
+            # ningun efecto sobre las subidas (solo sobre el resto de la app).
+            from .cameras_config import GLOBAL_CONFIG
+            url = GLOBAL_CONFIG.get(
+                'server_url',
+                'https://weaponnotificationserver.onrender.com/api/images/')
             
             # Los nombres DEBEN coincidir con el serializer del servidor
             # (UploadAlertSerializer): userID (= token), location, alertReceiver, image.
@@ -484,13 +507,22 @@ class DetectionTapo(QThread):
                         data['confidence'] = round(max(confidences), 4)
                 except (TypeError, ValueError):
                     pass
+                # TIMEOUT: el servidor corre en el plan gratuito de Render, que
+                # APAGA la instancia tras un rato sin trafico. El primer request
+                # despues de ese apagado tarda ~30-60 s en responder (arranque en
+                # frio) mientras los siguientes van en ~1 s. Con el timeout de 10 s
+                # que habia antes, la PRIMERA alerta fallaba siempre y en silencio:
+                # se registraba el error en el log y no se reintentaba, asi que la
+                # deteccion nunca llegaba al servidor. Se separa el timeout de
+                # conexion (10 s, detecta un host caido rapido) del de lectura
+                # (90 s, tolera el arranque en frio).
                 response = requests.post(url, files=files, data=data,
-                                         headers=headers, timeout=10)
-            
+                                         headers=headers, timeout=(10, 90))
+
             if response.status_code == 200:
                 logging.info(f"[Cámara {self.camera_id}] Enviado al servidor")
             else:
-                logging.error(f"[Cámara {self.camera_id}] Error servidor: {response.status_code}")
+                logging.error(f"[Cámara {self.camera_id}] Error servidor: {response.status_code} {response.text[:200]}")
                 
         except Exception as e:
             logging.error(f"[Cámara {self.camera_id}] Error al enviar: {e}")

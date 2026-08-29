@@ -186,7 +186,6 @@ LOGGING = {
             'level': 'INFO',
             'propagate': False,
         },
-        # Nuestro subsistema de Web Push (webpush_sender / push_views).
         'detection': {
             'handlers': ['file'],
             'level': 'INFO',
@@ -251,15 +250,3 @@ AWS_DEFAULT_ACL=None
 PUBLIC_MEDIA_LOCATION = 'media'
 MEDIA_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/{PUBLIC_MEDIA_LOCATION}/'
 DEFAULT_FILE_STORAGE = 'webdev.storage_backends.PublicMediaStorage'
-
-# ==========================================
-# 🔔 WEB PUSH (VAPID)
-# ==========================================
-# Claves del par VAPID para notificaciones Web Push (estándar abierto, sin FCM).
-# Genera el par con:  python manage.py generate_vapid_keys
-# y guarda los valores en variables de entorno (.env local / env vars en Render).
-# NUNCA hardcodear estas claves en el repositorio.
-VAPID_PUBLIC_KEY = os.environ.get('VAPID_PUBLIC_KEY', '')
-VAPID_PRIVATE_KEY = os.environ.get('VAPID_PRIVATE_KEY', '')
-# El claim "sub" del JWT VAPID: un mailto o una URL de contacto del responsable.
-VAPID_ADMIN_EMAIL = os.environ.get('VAPID_ADMIN_EMAIL', 'mailto:admin@weapondetection.com')

@@ -7,8 +7,8 @@ Soporta cualquier número de cámaras dinámicamente con gestor integrado
 import sys
 import os
 import json
-from PyQt5.QtWidgets import (QMainWindow, QWidget, QLabel, QLineEdit, 
-                             QPushButton, QCheckBox, QGroupBox,
+from PyQt5.QtWidgets import (QMainWindow, QWidget, QLabel, QLineEdit,
+                             QPushButton, QCheckBox, QGroupBox, QComboBox,
                              QVBoxLayout, QHBoxLayout, QFormLayout, QMessageBox,
                              QTabWidget, QFrame, QScrollArea)
 from PyQt5.QtCore import Qt, pyqtSignal
@@ -18,6 +18,11 @@ import cv2
 
 from .rtsp_fields import RtspFieldsGroup
 from . import rtsp_profiles as profiles
+from .cameras_config import (SCENE_PROFILES, DEFAULT_SCENE, box_area_limits,
+                             scene_label)
+
+# Mismo orden que en el gestor de camaras.
+SCENE_ORDER = ['closeup', 'indoor', 'outdoor', 'custom']
 
 # Importar el gestor de cámaras
 try:
@@ -53,8 +58,9 @@ class MonitoringWindow(QMainWindow):
         logging.info(f"MonitoringWindow inicializada - {total_cams} cámara(s) detectada(s)")
     
     def load_cameras_from_json(self):
-        """Cargar cámaras desde cameras.json"""
-        config_file = 'cameras.json'
+        """Cargar cámaras desde cameras.json (junto a la aplicación)."""
+        from .cameras_config import cameras_json_path
+        config_file = cameras_json_path()
         
         if os.path.exists(config_file):
             try:
@@ -373,7 +379,7 @@ class MonitoringWindow(QMainWindow):
         # ==========================================
         # UBICACIÓN
         # ==========================================
-        location_group = QGroupBox("📍 Ubicación")
+        location_group = QGroupBox("📍 Ubicación y escenario")
         location_group.setFont(QFont("Segoe UI", 11, QFont.Bold))
         location_layout = QFormLayout()
         location_layout.setSpacing(10)
@@ -386,6 +392,31 @@ class MonitoringWindow(QMainWindow):
         widgets['location'] = location_input
         
         location_layout.addRow("Ubicación:", location_input)
+
+        # Escenario: a que distancia vigila esta camara. Determina que tamano
+        # puede tener un arma en el encuadre y, por tanto, que detecciones se
+        # descartan por imposibles (un auto entero no es un cuchillo).
+        scene_combo = QComboBox()
+        for clave in SCENE_ORDER:
+            scene_combo.addItem(SCENE_PROFILES[clave][0])
+        scene_combo.setFont(QFont("Segoe UI", 10))
+        scene_combo.setMinimumHeight(45)
+        scene_combo.setToolTip(
+            "A qué distancia vigila esta cámara. El sistema descarta las "
+            "detecciones cuyo tamaño sea imposible para un arma a esa distancia."
+        )
+        widgets['scene'] = scene_combo
+
+        scene_help = QLabel(
+            "Evita falsas alarmas: en exteriores, un vehículo ocupa demasiado "
+            "encuadre para ser un arma."
+        )
+        scene_help.setFont(QFont("Segoe UI", 8))
+        scene_help.setStyleSheet("color: #7f8c8d;")
+        scene_help.setWordWrap(True)
+
+        location_layout.addRow("Escenario:", scene_combo)
+        location_layout.addRow("", scene_help)
         location_group.setLayout(location_layout)
         tab_layout.addWidget(location_group)
         
@@ -430,6 +461,11 @@ class MonitoringWindow(QMainWindow):
                     widgets['fields'].set_config(config)
                     widgets['location'].setText(config.get('location', ''))
                     widgets['enabled'].setChecked(config.get('enabled', True))
+
+                    escenario = str(config.get('scene', '') or '').lower()
+                    if escenario not in SCENE_ORDER:
+                        escenario = DEFAULT_SCENE
+                    widgets['scene'].setCurrentIndex(SCENE_ORDER.index(escenario))
 
             logging.info(f"Configuraciones cargadas para {len(self.camera_widgets)} cámara(s)")
 
@@ -504,11 +540,16 @@ class MonitoringWindow(QMainWindow):
         widgets = self.camera_widgets[camera_key]
         camera_num = self.get_camera_number(camera_key)
 
-        config = {
+        # Se parte de la config guardada para NO perder las claves que esta
+        # ventana no edita (device_index de una webcam, ajustes finos de tamano
+        # de caja); encima se aplica lo que el usuario ve en pantalla.
+        config = dict(self.cameras.get(camera_key) or {})
+        config.update({
             'name': self.cameras[camera_key].get('name', f'Cámara {camera_num}'),
             'location': widgets['location'].text(),
             'enabled': widgets['enabled'].isChecked(),
-        }
+            'scene': SCENE_ORDER[widgets['scene'].currentIndex()],
+        })
         config.update(widgets['fields'].get_config())
         return config
     
@@ -569,12 +610,16 @@ class MonitoringWindow(QMainWindow):
                     fuente = (f"Webcam local (índice {profiles.local_device_index(config)})"
                               if profiles.is_local_source(config)
                               else f"IP: {config.get('ip', '')}")
+                    min_area, max_area = box_area_limits(config)
                     QMessageBox.information(
                         self, f"✅ Cámara {camera_num} Conectada",
                         f"¡Conexión exitosa!\n\n"
                         f"Resolución: {width}x{height}\n"
                         f"{fuente}\n"
-                        f"Marca: {profiles.brand_label(config.get('brand', 'tapo'))}"
+                        f"Marca: {profiles.brand_label(config.get('brand', 'tapo'))}\n"
+                        f"Escenario: {scene_label(config.get('scene'))}\n"
+                        f"Se aceptan detecciones que ocupen entre "
+                        f"{min_area * 100:.3f}% y {max_area * 100:.1f}% del encuadre."
                     )
                 else:
                     QMessageBox.warning(

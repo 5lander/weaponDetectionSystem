@@ -42,7 +42,21 @@ Cliente/detections
 Cliente/diagnostico
 Cliente/inference_metrics.csv
 Cliente/eval_web
+# Videos de prueba: pesados y no forman parte del codigo. Se procesan en local.
+Cliente/videos_prueba/
+# Dataset de imagenes: pesado, se regenera desde los videos.
+dataset/
+videos/
+*.mp4
+*.avi
+*.mov
+*.mkv
 *.pt
+# EXCEPCION: el modelo ACTIVO si se versiona (21 MB, muy por debajo del
+# limite de 100 MB de GitHub). Sin el, quien clone el repositorio no puede
+# ejecutar la aplicacion desde el codigo fuente: el motor no arranca.
+# last.pt (101 MB) sigue excluido; predict.pt ya estaba versionado de antes.
+!Cliente/model/lastv2.pt
 *.pth
 *.h5
 *.tar.gz
@@ -91,3 +105,10 @@ htmlcov/
 
 01_Tesis_Original_Sistema_Deteccion_Armas.docx
 CAMBIOS_A_DOCUMENTAR.md
+# cameras.json contiene credenciales REALES de camaras (usuario/password/IP) y,
+# en algunos casos, la ubicacion fisica del dispositivo. El repositorio es
+# PUBLICO, asi que este archivo NO se versiona (se dejo de trackear el
+# 2026-08-28; commits anteriores a esa fecha aun conservan credenciales viejas
+# en su historial). Usar Cliente/cameras.example.json como plantilla: copiarlo
+# a Cliente/cameras.json y completar los datos reales localmente.
+Cliente/cameras.json

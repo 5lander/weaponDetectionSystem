@@ -10,6 +10,17 @@ import shutil
 import subprocess
 from pathlib import Path
 
+# Los mensajes de progreso de este script llevan emojis. En Windows, cuando
+# stdout NO es una consola UTF-8 (salida redirigida a un archivo, a una
+# tuberia o lanzada desde otro script), el codec por defecto es cp1252 y el
+# primer print() revienta con UnicodeEncodeError, abortando el build ANTES
+# de empaquetar nada. Forzar UTF-8 en la salida lo evita.
+for _flujo in (sys.stdout, sys.stderr):
+    try:
+        _flujo.reconfigure(encoding='utf-8', errors='replace')
+    except (AttributeError, ValueError):
+        pass
+
 def create_spec_file():
     """Crea el archivo .spec personalizado CORREGIDO para PyInstaller"""
     
@@ -31,10 +42,24 @@ app_name = "WeaponDetectionSystem"
 # Recopilar datos adicionales
 added_files = [
     ('UI/*.ui', 'UI'),
-    ('model/candidate_multi.pt', 'model'),  # modelo activo (multi-clase)
+    # El icono NO estaba: el .spec solo copiaba *.ui, asi que la app lo
+    # buscaba en runtime (resource_path('UI/icon.ico')) y no lo encontraba;
+    # las ventanas salian con el icono generico de Windows. El parametro
+    # icon= de EXE solo cubre el icono del archivo .exe, no el de las ventanas.
+    ('UI/icon.ico', 'UI'),
+    ('model/lastv2.pt', 'model'),  # modelo activo (multi-clase)
     ('Styles/*.py', 'Styles'),
     ('requirements*.txt', '.'),
-    ('config/settings.ini', '.'),
+    # settings.ini DEBE quedar en dist/config/, que es donde lo busca
+    # cameras_config._settings_ini_path() (<dir de la app>/config/settings.ini).
+    # Con destino '.' caia en la raiz del dist y la app NUNCA lo leia: el
+    # ejecutable corria con los valores por defecto del codigo, ignorando
+    # el umbral, los intervalos y la URL del servidor configurados.
+    ('config/settings.ini', 'config'),
+    # cameras.json va JUNTO AL EXE (la app lo lee y lo reescribe desde el
+    # gestor de camaras). Sin esto, al arrancar no encuentra ninguna camara
+    # configurada y se crea una de ejemplo que nunca conecta.
+    ('cameras.json', '.'),
 ]
 
 # --- Intel MKL (CRITICO): torch delay-carga en runtime mkl_core/mkl_def/
@@ -133,6 +158,31 @@ a = Analysis(
 )
 
 # Filtrar archivos innecesarios para reducir tamaño (pero conservar lo esencial)
+# ---------------------------------------------------------------------------
+# PESO MUERTO DE TORCH: el wheel de PyTorch trae, junto a las DLL, sus
+# bibliotecas ESTATICAS de enlace (*.lib, ~744 MB, de los cuales dnnl.lib solo
+# ya son 606 MB) y las cabeceras C++ de torch/include (~50 MB, 8400 archivos).
+# Sirven para COMPILAR extensiones C++ contra libtorch, no para ejecutar:
+# todos los .lib empiezan por "!<arch>" (archivo estatico COFF), y Windows
+# solo puede cargar DLLs en runtime. oneDNN, por ejemplo, va enlazado dentro
+# de torch_cpu.dll; no existe ningun dnnl.dll que cargar.
+# Verificado: quitandolos, el ejecutable arranca igual.
+def _sin_peso_muerto(lista):
+    limpia = []
+    for entrada in lista:
+        destino = entrada[0].replace(chr(92), "/").lower()
+        if destino.endswith(".lib"):
+            continue
+        if destino.startswith("torch/include/"):
+            continue
+        limpia.append(entrada)
+    return limpia
+
+
+a.binaries = _sin_peso_muerto(a.binaries)
+a.datas = _sin_peso_muerto(a.datas)
+# ---------------------------------------------------------------------------
+
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 # Crear ejecutable
@@ -296,10 +346,12 @@ def verify_project_structure():
     
     required_files = [
         'main.py',
-        # Nombres actualizados tras el refactor (antes detection.py/detectionWindow.py):
+        # Nombres actualizados tras el refactor del cliente
+        # (antes: App/detection.py y App/detectionWindow.py).
         'App/detection_tapo.py',
         'App/detectionWindowDual.py',
         'App/inference_engine.py',
+        'App/cameras_config.py',
         'App/loginWindowClass.py',
         'App/monitoringWindowClass.py',
         'UI/loginWindow.ui',
@@ -307,6 +359,7 @@ def verify_project_structure():
         'UI/monitoringCameraWindow.ui',
         'Styles/loginStyle.py',
         'Styles/monitoringStyle.py',
+        'config/settings.ini',
         'requirementsClient.txt'
     ]
     
@@ -319,29 +372,19 @@ def verify_project_structure():
             missing_files.append(file_path)
             print(f"  ❌ {file_path} - FALTANTE")
     
-    # Verificar modelo YOLO
-    model_path = 'model/last.pt'
+    # Verificar modelo YOLO ACTIVO. Es el mismo que carga GLOBAL_CONFIG
+    # (App/cameras_config.py -> 'model_path'). Si falta, el empaquetado se
+    # aborta: NO se sustituye por un modelo generico, porque yolov8n detecta
+    # personas y autos, no armas, y el .exe resultante pareceria funcionar
+    # mientras no detecta nada.
+    model_path = 'model/lastv2.pt'
     if os.path.exists(model_path):
         model_size = os.path.getsize(model_path) / (1024 * 1024)  # MB
         print(f"  ✅ {model_path} ({model_size:.1f} MB)")
     else:
-        print(f"  ⚠️ {model_path} - FALTANTE")
-        print("    💡 El script puede crear un modelo básico automáticamente")
-        
-        # Preguntar si crear modelo automáticamente
-        try:
-            response = input("    ¿Crear modelo YOLO básico automáticamente? (s/n): ").strip().lower()
-            if response in ['s', 'si', 'y', 'yes']:
-                if create_basic_model():
-                    print(f"  ✅ {model_path} creado automáticamente")
-                else:
-                    missing_files.append(model_path)
-            else:
-                missing_files.append(model_path)
-        except (EOFError, KeyboardInterrupt):
-            print("    ❌ Modelo no creado")
-            missing_files.append(model_path)
-    
+        print(f"  ❌ {model_path} - FALTANTE (modelo de deteccion de armas)")
+        missing_files.append(model_path)
+
     # Verificar archivos __init__.py
     init_files = ['App/__init__.py', 'Styles/__init__.py']
     for init_file in init_files:
@@ -356,34 +399,6 @@ def verify_project_structure():
     
     print("✅ Estructura del proyecto correcta")
     return True
-
-def create_basic_model():
-    """Crea un modelo YOLO básico si no existe"""
-    try:
-        print("    📦 Descargando modelo YOLO básico...")
-        from ultralytics import YOLO
-        
-        # Crear directorio model si no existe
-        os.makedirs('model', exist_ok=True)
-        
-        # Descargar modelo preentrenado
-        model = YOLO('yolov8n.pt')  # Modelo pequeño y rápido
-        
-        # Guardar como predict.pt
-        model_path = 'model/last.pt'
-        
-        # Copiar el archivo descargado
-        import shutil
-        if os.path.exists('yolov8n.pt'):
-            shutil.copy('yolov8n.pt', model_path)
-            os.remove('yolov8n.pt')  # Limpiar archivo temporal
-        
-        print("    ✅ Modelo YOLO básico creado")
-        return True
-        
-    except Exception as e:
-        print(f"    ❌ Error creando modelo: {e}")
-        return False
 
 def create_init_file(file_path):
     """Crea archivos __init__.py básicos"""
@@ -425,11 +440,12 @@ def clean_previous_builds():
             shutil.rmtree(dir_name)
             print(f"  🗑️ Eliminado: {dir_name}/")
     
-    # Limpiar archivos .spec anteriores (excepto el que vamos a crear)
+    # Limpiar archivos .spec anteriores. Se conservan el que genera este script
+    # y los versionados (*_prod.spec): esos son parte del repositorio.
     for file_pattern in files_to_clean:
         import glob
         for file_path in glob.glob(file_pattern):
-            if file_path != 'weapon_detection.spec':
+            if file_path != 'weapon_detection.spec' and not file_path.endswith('_prod.spec'):
                 os.remove(file_path)
                 print(f"  🗑️ Eliminado: {file_path}")
 
@@ -510,67 +526,91 @@ def create_shortcut():
         print(f"⚠️ No se pudo crear acceso directo: {e}")
 
 def create_readme():
-    """Crea un README con instrucciones"""
-    readme_content = """# Weapon Detection System v2.0 - CORREGIDO
+    """Crea un README con instrucciones REALES para quien reciba el ejecutable.
 
-## Ejecutable de Windows
+    El README anterior estaba desactualizado en varios puntos que confunden a
+    quien instala el sistema por primera vez: apuntaba a un servidor de
+    desarrollo local (127.0.0.1:8000) en vez del servidor real, decia "cada 3
+    segundos" cuando el intervalo efectivo es 2, y "4 GB de espacio" cuando el
+    empaquetado con PyTorch+CUDA pesa mas de 5 GB.
+    """
+    from App.cameras_config import GLOBAL_CONFIG
 
-### NOTAS DE LA VERSIÓN CORREGIDA:
-- ✅ Solucionado error de matplotlib/ultralytics
-- ✅ Incluidas todas las dependencias necesarias
-- ✅ Tamaño optimizado para mejor funcionamiento
-- ✅ Verificado compatibilidad con Windows 10/11
+    readme_content = """# Weapon Detection System - Guia de instalacion
 
-### Instrucciones de Uso:
+## Como ejecutar (no requiere instalar nada)
 
-1. **Ejecutar la aplicación:**
-   - Hacer doble clic en `WeaponDetectionSystem.exe`
-   - O usar el acceso directo "Weapon Detection System.lnk"
+1. Descomprimir esta carpeta completa en cualquier ubicacion (por ejemplo,
+   el Escritorio). NO mover WeaponDetectionSystem.exe fuera de su carpeta:
+   necesita los archivos que lo acompanan (model/, config/, UI/, etc.).
+2. Hacer doble clic en WeaponDetectionSystem.exe.
+3. En la ventana de login, usar las credenciales que se le hayan entregado,
+   o pulsar "Registrarse" para crear una cuenta nueva.
 
-2. **Primer uso:**
-   - Registrarse en: http://127.0.0.1:8000/register/
-   - Iniciar sesión con sus credenciales
-   - Configurar ubicación y contacto para notificaciones
+## Primer arranque: qué es normal ver
 
-3. **Requisitos del sistema:**
-   - Windows 10/11 (64-bit recomendado)
-   - Cámara web funcional
-   - Conexión a internet (para envío de alertas)
-   - Mínimo 8GB RAM (recomendado para matplotlib/pytorch)
-   - 4GB espacio libre en disco
+- El servidor de alertas usa un plan gratuito que SE APAGA tras un rato sin
+  uso. Si el login tarda hasta 30-40 segundos la primera vez, es normal: el
+  servidor esta despertando. Los intentos siguientes tardan 1-3 segundos.
+- El primer analisis de la camara tarda unos segundos mas que los siguientes
+  (el motor de deteccion se prepara la primera vez). Despues de eso, cada
+  analisis es casi instantaneo si el equipo tiene GPU NVIDIA, o de menos de
+  un segundo si corre solo en CPU.
+- La camara activa por defecto es la webcam del equipo (indice 0). Si el
+  equipo no tiene camara integrada ni USB conectada, se debe conectar una
+  antes de abrir la aplicacion.
 
-4. **Características:**
-   - Detección de armas en tiempo real
-   - Análisis optimizado cada 3 segundos
-   - Notificaciones automáticas por email/SMS
-   - Interfaz moderna y fácil de usar
-   - Monitoreo de recursos del sistema
+## Como se decide que hay un arma
 
-### Archivos incluidos:
-- `WeaponDetectionSystem.exe` - Aplicación principal
-- `model/` - Modelo de IA entrenado
-- `UI/` - Archivos de interfaz
-- `_internal/` - Librerías y dependencias (matplotlib, pytorch, etc.)
+- Umbral de confianza: {umbral:.2f} (0.0 a 1.0). Mas alto = menos falsos
+  positivos, pero puede perder detecciones borrosas o en movimiento.
+- Confirmacion: el arma debe detectarse en {n} de los ultimos {m} analisis
+  (cada uno cada {intervalo:.0f} s) antes de generar una alerta. Esto evita
+  que un solo frame confuso dispare una alerta falsa.
+- En la practica: sostener el objeto de prueba, quieto y visible frente a la
+  camara, entre {espera_min:.0f} y {espera_max:.0f} segundos (lo justo para
+  que entren 2 analisis dentro de esa ventana).
+- Estos valores se ajustan en config/settings.ini sin necesidad de volver a
+  generar el ejecutable (se leen cada vez que la aplicacion arranca).
 
-### Solución de problemas:
-- Si hay errores de inicio, revisar `app_log.log`
-- Verificar que la cámara no esté siendo usada por otra aplicación
-- Asegurar conexión estable a internet para las alertas
+## Requisitos del equipo
 
-### Soporte:
-- Para reportar errores o sugerencias
-- Revisar logs en: `app_log.log`
+- Windows 10 o 11, 64-bit.
+- Camara web (integrada o USB).
+- Conexion a internet (para el login y el envio de alertas).
+- Al menos {espacio} GB libres en disco.
+- GPU NVIDIA: opcional. Si no hay, o sus drivers CUDA no coinciden, la
+  aplicacion detecta esto sola y usa el procesador (CPU) sin fallar.
+
+## Si algo no funciona
+
+- Revisar el archivo app_log.log (se crea junto al .exe, en esta misma
+  carpeta) despues de intentar usar la aplicacion: registra cada paso del
+  arranque, la configuracion con la que corrio y cualquier error.
+- Si aparece un error de conexion en el login: comprobar la conexion a
+  internet y reintentar (puede ser el arranque en frio del servidor
+  mencionado arriba).
+- Si la camara no aparece o no abre: verificar que ninguna otra aplicacion
+  (Zoom, Teams, etc.) la este usando en ese momento.
 
 ---
-Desarrollado con PyQt5, OpenCV, YOLO y PyTorch
-Versión 2.0 CORREGIDA - Optimizada para Windows
-Incluye matplotlib, scipy, pandas y todas las dependencias de ultralytics
+Sistema de Deteccion de Armas - Trabajo de tesis
+PyQt5 + OpenCV + YOLO (Ultralytics) + PyTorch
 """
-    
+    espera_min = GLOBAL_CONFIG['confirmation_frames'] * GLOBAL_CONFIG['analysis_interval']
+    espera_max = GLOBAL_CONFIG['confirmation_window'] * GLOBAL_CONFIG['analysis_interval']
+    readme_content = readme_content.format(
+        umbral=GLOBAL_CONFIG['confidence_threshold'],
+        n=GLOBAL_CONFIG['confirmation_frames'],
+        m=GLOBAL_CONFIG['confirmation_window'],
+        intervalo=GLOBAL_CONFIG['analysis_interval'],
+        espera_min=espera_min,
+        espera_max=espera_max,
+        espacio=6,
+    )
+
     with open('dist/WeaponDetectionSystem/README.txt', 'w', encoding='utf-8') as f:
         f.write(readme_content)
-    
-    print("📄 README.txt actualizado creado en el directorio de distribución")
 
 def main():
     """Función principal del script de construcción CORREGIDO"""
@@ -617,15 +657,29 @@ def main():
         print("🔍 Revise los errores arriba y corrija antes de reintentar")
         return False
 
+def _pausa():
+    """Espera Enter SOLO si hay una terminal interactiva.
+
+    Sin esto, al lanzar el build desde un script o CI (stdin cerrado) el
+    input() lanza EOFError DESPUES de que el empaquetado ya termino bien, y
+    ese error se reporta como si la construccion hubiera fallado.
+    """
+    try:
+        if sys.stdin is not None and sys.stdin.isatty():
+            input("\nPresione Enter para salir...")
+    except (EOFError, KeyboardInterrupt, ValueError):
+        pass
+
+
 if __name__ == "__main__":
     try:
         success = main()
-        input("\nPresione Enter para salir...")
+        _pausa()
         sys.exit(0 if success else 1)
     except KeyboardInterrupt:
         print("\n\n⚠️ Construcción interrumpida por el usuario")
         sys.exit(1)
     except Exception as e:
         print(f"\n❌ Error crítico: {e}")
-        input("\nPresione Enter para salir...")
+        _pausa()
         sys.exit(1)

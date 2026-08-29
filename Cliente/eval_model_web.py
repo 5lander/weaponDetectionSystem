@@ -25,7 +25,7 @@ def _here():
     return os.path.dirname(os.path.abspath(__file__))
 
 
-MODEL_PATH = os.path.join(_here(), "model", "last.pt")
+MODEL_PATH = os.path.join(_here(), "model", "lastv2.pt")
 OUT_DIR = os.path.join(_here(), "eval_web")
 CONF_DIAG = 0.15  # umbral bajo: ver TODO lo que el modelo piensa
 
